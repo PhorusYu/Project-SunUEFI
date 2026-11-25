@@ -102,8 +102,9 @@ def validate(inputs, native_data, owners=()):
     tree = read_fdt(inputs[DTB])['tree']
     native_tree = read_fdt(inputs[NATIVE_DTB])['tree']
     _, _, native = parse_native(native_data)
-    if len(native) != 49:
-        raise ValueError('Expected the actual 49-row product table')
+    expected_native_rows = 48 if vendor_inputs.TARGET == 'miro' else 49
+    if len(native) != expected_native_rows:
+        raise ValueError(f'Expected the actual {expected_native_rows}-row product table')
     protected = [(r['name'], (r['base'], r['end'])) for r in native]
     if len(owners) > 64:
         raise ValueError('Too many explicit owners')
@@ -187,7 +188,7 @@ def prepare(root, input_native_text, owners=()):
         raise ValueError('Display mapping generator is a symlink')
     generator_bytes = generator.read_bytes()
     native = input_native_text.encode()
-    if digest(native) != PINS[NATIVE]:
+    if vendor_inputs.TARGET == 'piano' and digest(native) != PINS[NATIVE]:
         raise ValueError('Display mapping original 49-row SHA drift')
     inputs = {}
     for relative, expected in PINS.items():
@@ -225,13 +226,14 @@ def prepare(root, input_native_text, owners=()):
 
 def recover_original(expanded_text):
     text, array, rows = parse_native(expanded_text.encode())
-    if len(rows) not in (52, 53) or array[1].count(MARKER) != 1:
+    expected_rows = 52 if vendor_inputs.TARGET == 'miro' else 53
+    if len(rows) != expected_rows or array[1].count(MARKER) != 1:
         raise ValueError('Expanded display table block missing/duplicated')
     original_body = array[1].split(MARKER)[0]
     if not original_body.endswith(','):
         raise ValueError('Expanded display table separator changed')
     original = text[:array.start(1)] + original_body[:-1] + text[array.end(1):]
-    if digest(original.encode()) != PINS[NATIVE]:
+    if vendor_inputs.TARGET == 'piano' and digest(original.encode()) != PINS[NATIVE]:
         raise ValueError('Expanded display source original 49-row SHA drift')
     return original
 
@@ -253,8 +255,9 @@ def original_native(root=ROOT):
 
 
 def verify(root, expanded_text, record):
-    if len(parse_native(expanded_text.encode())[2]) != 53:
-        raise ValueError('Current display verification requires 53 rows')
+    expected_rows = 52 if vendor_inputs.TARGET == 'miro' else 53
+    if len(parse_native(expanded_text.encode())[2]) != expected_rows:
+        raise ValueError(f'Current display verification requires {expected_rows} rows')
     original = recover_original(expanded_text)
     expected, expected_record = prepare(root, original, record.get('owners', ()))
     if expected != expanded_text or record != expected_record:

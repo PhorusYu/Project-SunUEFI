@@ -13,19 +13,22 @@ STATIC CONST CHAR8 mBase64[]="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwx
 STATIC VOID EFIAPI Capture (EFI_EVENT Event, VOID *Context) {
   EFI_GRAPHICS_OUTPUT_PROTOCOL *Gop;
   unsigned char *Pixels, *Png=NULL; size_t PngBytes=0;
-  UINTN Width=800, Height=534; EFI_STATUS Status;
+  EFI_STATUS Status;
   gBS->CloseEvent (Event); mScreenshot=NULL;
   Status=gBS->LocateProtocol (&gEfiGraphicsOutputProtocolGuid,NULL,(VOID **)&Gop);
   if (EFI_ERROR (Status) || Gop->Mode==NULL || Gop->Mode->Info==NULL) { return; }
   EFI_GRAPHICS_OUTPUT_MODE_INFORMATION *Info=Gop->Mode->Info;
-  if (Gop->Mode->FrameBufferBase!=0xFC800000ULL || Info->HorizontalResolution!=3200 ||
-      Info->VerticalResolution!=2136 || Info->PixelsPerScanLine!=3200 ||
+  UINTN Scale=0;
+  if (Info->HorizontalResolution==3200 && Info->VerticalResolution==2136 && Info->PixelsPerScanLine==3200) Scale=4;
+  else if (Info->HorizontalResolution==1440 && Info->VerticalResolution==3200 && Info->PixelsPerScanLine==1440) Scale=2;
+  if (Gop->Mode->FrameBufferBase!=0xFC800000ULL || Scale==0 ||
       Info->PixelFormat!=PixelBlueGreenRedReserved8BitPerColor ||
-      Gop->Mode->FrameBufferSize<3200ULL*2136*4) { return; }
+      Gop->Mode->FrameBufferSize<(UINT64)Info->HorizontalResolution*Info->VerticalResolution*4) { return; }
+  UINTN Width=Info->HorizontalResolution/Scale, Height=Info->VerticalResolution/Scale;
   Pixels=malloc(Width*Height*4); if(Pixels==NULL) { return; }
   CONST volatile UINT8 *Frame=(CONST volatile UINT8 *)(UINTN)Gop->Mode->FrameBufferBase;
   for (UINTN Y=0;Y<Height;++Y) for (UINTN X=0;X<Width;++X) {
-    CONST volatile UINT8 *Source=Frame+((Y*4)*3200+X*4)*4;
+    CONST volatile UINT8 *Source=Frame+((Y*Scale)*Info->HorizontalResolution+X*Scale)*4;
     UINT8 *Target=Pixels+(Y*Width+X)*4;
     Target[0]=Source[2];Target[1]=Source[1];Target[2]=Source[0];Target[3]=255;
   }

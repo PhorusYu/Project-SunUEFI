@@ -45,6 +45,7 @@ PRODUCT_COMPONENTS={
     'usb-host':('PianoUsbHost.c','PianoUsbHost.h','PianoUsbTypec.c','PianoUsbTypec.h'),
     'touch-product':('PianoGeniSpiGpi.c','PianoGeniSpiGpi.h','PianoTouchNvt.c','PianoTouchNvt.h',
                      'PianoTouchMatrix.c','PianoTouchMatrix.h','PianoTouchService.c','PianoTouchService.h'),
+    'miro-touch':('MiroTouch.c','MiroTouch.h'),
 }
 PIANO_FIRMWARE='vendor/firmware'
 POGO_FIRMWARE_NAME='nanosic/MCU_Upgrade.bin'
@@ -210,17 +211,24 @@ def fix_product_low_heap(text,dtb):
     """Cold product-only carveout correction; never retag live DXE allocations."""
     from plan_piano_dram import extract_dt
     dt=extract_dt(dtb)
-    expected={'/reserved-memory/adspslpi_region@9ee00000':(0xB8200000,0xBD980000),
-              '/reserved-memory/hwfence-shmem':(0xD4E23000,0xD5100000)}
+    if vendor_inputs.TARGET=='miro':
+        expected={'/reserved-memory/adspslpi_region@9ee00000':(0x9EE00000,0xA3380000),
+                  '/reserved-memory/hwfence-shmem':(0xD4E23000,0xD5100000)}
+        new='''  {"DXE_Heap", 0xBD930000, 0x174F3000, AddMem, 0, 0x703C07, 7, WRITE_BACK_XN},
+  {"Piano_HWFence_Reserved", 0xD4E23000, 0x2DD000, HobOnlyNoCacheSetting, 5, 0x703C07, 0, WRITE_BACK_XN},
+  {"DXE_Heap_Upper", 0xD5100000, 0x2F00000, AddMem, 0, 0x703C07, 7, WRITE_BACK_XN},'''
+    else:
+        expected={'/reserved-memory/adspslpi_region@9ee00000':(0xB8200000,0xBD980000),
+                  '/reserved-memory/hwfence-shmem':(0xD4E23000,0xD5100000)}
+        new='''  {"Piano_ADSP_Heap_Conflict", 0xBD930000, 0x50000, HobOnlyNoCacheSetting, 5, 0x703C07, 0, WRITE_BACK_XN},
+  {"DXE_Heap", 0xBD980000, 0x174A3000, AddMem, 0, 0x703C07, 7, WRITE_BACK_XN},
+  {"Piano_HWFence_Reserved", 0xD4E23000, 0x2DD000, HobOnlyNoCacheSetting, 5, 0x703C07, 0, WRITE_BACK_XN},
+  {"DXE_Heap_Upper", 0xD5100000, 0x2F00000, AddMem, 0, 0x703C07, 7, WRITE_BACK_XN},'''
     for path,bounds in expected.items():
         rows=[row for row in dt['fixed']if row['path']==path]
         if len(rows)!=1 or (rows[0]['base'],rows[0]['end'])!=bounds or not rows[0]['no_map']:
             raise ValueError('Product low heap fixed owner changed: '+path)
     old='  {"DXE_Heap", 0xBD930000, 0x1A6D0000, AddMem, 0, 0x703C07, 7, WRITE_BACK_XN},'
-    new='''  {"Piano_ADSP_Heap_Conflict", 0xBD930000, 0x50000, HobOnlyNoCacheSetting, 5, 0x703C07, 0, WRITE_BACK_XN},
-  {"DXE_Heap", 0xBD980000, 0x174A3000, AddMem, 0, 0x703C07, 7, WRITE_BACK_XN},
-  {"Piano_HWFence_Reserved", 0xD4E23000, 0x2DD000, HobOnlyNoCacheSetting, 5, 0x703C07, 0, WRITE_BACK_XN},
-  {"DXE_Heap_Upper", 0xD5100000, 0x2F00000, AddMem, 0, 0x703C07, 7, WRITE_BACK_XN},'''
     if text.count(old)!=1:raise ValueError('Unexpected original product DXE heap row')
     text=text.replace(old,new)
     # NoHob already excludes DBI from the allocator; remove its misleading
@@ -475,13 +483,14 @@ def prepare(root=ROOT):
     header,app_identity=digest_header(product_app/'SimpleInit.efi')
     raw=(product_app/'SimpleInit.efi').read_bytes()
     (product_app/'app-payload.bin').write_bytes(struct.pack('<16sIIQ32s',b'SUNUEFI-APPv1\0',1,64,len(raw),hashlib.sha256(raw).digest())+raw)
+    probe_name='miroProbe' if vendor_inputs.TARGET=='miro' else 'pianoProbe'
     target=root/'uefi/platforms/pianoProductPkg'
     if target.exists():shutil.rmtree(target)
-    shutil.copytree(root/'uefi/platforms/pianoProbePkg',target)
+    shutil.copytree(root/'uefi/platforms'/(probe_name+'Pkg'),target)
     for path in target.rglob('*'):
         if path.is_file() and path.suffix in ('.c','.h','.inf','.dsc','.dec','.fdf','.py'):
-            path.write_text(path.read_text().replace('pianoProbe','pianoProduct'))
-    for suffix in ('dsc','dec','fdf'):(target/f'pianoProbe.{suffix}').rename(target/f'pianoProduct.{suffix}')
+            path.write_text(path.read_text().replace(probe_name,'pianoProduct'))
+    for suffix in ('dsc','dec','fdf'):(target/f'{probe_name}.{suffix}').rename(target/f'pianoProduct.{suffix}')
     shutil.rmtree(target/'Library/Stage0BootManagerLib')
     shutil.rmtree(target/'Library/RamLogSerialPortLib')
     shutil.copytree(root/'uefi/components/product-support',target,dirs_exist_ok=True)
@@ -606,7 +615,7 @@ def prepare(root=ROOT):
     # not dispatched. FETCH enables the shared live SMMU storage guard.
     display_test=os.environ.get('SUNUEFI_DISPLAY_DIAGNOSTIC','0')
     if display_test not in ('0','1','2'):raise ValueError('SUNUEFI_DISPLAY_DIAGNOSTIC must be 0, 1 or 2')
-    flags=PRODUCT_FLAGS+('PIANO_PRODUCT_DISPLAY_TEST='+display_test,)
+    flags=PRODUCT_FLAGS+('PIANO_PRODUCT_DISPLAY_TEST='+display_test,)+(('SUNUEFI_TARGET_MIRO=1',) if vendor_inputs.TARGET=='miro' else ())
     text+='\n[BuildOptions]\n  GCC:*_CLANGPDB_AARCH64_CC_FLAGS = '+ ' '.join('-D'+flag for flag in flags)+'\n'
     dsc.write_text(text)
     fdf=target/'pianoProduct.fdf';text=fdf.read_text().replace('# Host-only stage-0 diagnostic; NOT hardware validated.','# Single PianoUEFI product integration candidate; INCOMPLETE_NOT_RELEASE.')

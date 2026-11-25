@@ -5,6 +5,7 @@ never live hardware ownership or write authorization.
 """
 import hashlib
 import json
+import os
 from pathlib import Path, PurePosixPath
 import struct
 import uuid
@@ -12,13 +13,25 @@ import uuid
 from compose_piano_dtb import read_fdt
 
 ROOT = Path(__file__).resolve().parents[1]
-BUNDLE = 'vendor/piano'
-MANIFEST_SHA256 = '713247b46d5e1ccd25a9df3580a3095e691ebb552dbfacd28a1c431f20e5ef66'
-BOARD_DTB = BUNDLE + '/dtb/piano.dtb'
-BOARD_DTB_SHA256 = '82b2404bc872c1f60eb4c54c62eb9f2094b97586bdc2aeccae9765f5f258aff1'
-BOARD_SOURCE_SHA256 = 'a4b55dd3b77e69be451aaf2263c76f5496c93325767e49f748ee49570611e8d7'
-XBL_DTB = BUNDLE + '/dtb/xbl-config.dtb'
-XBL_DTB_SHA256 = '634ec73dc6d69a07b5af8246e03b0d2ae84dfb9ce9901135121c220443c9cd10'
+TARGET = os.environ.get('SUNUEFI_TARGET', 'piano')
+if TARGET == 'miro':
+    BUNDLE = 'vendor/miro'
+    MANIFEST_SHA256 = 'da424b30b71fb15e720cf0f1bca352c4c83f7c78e15d5bda3dc418c52cbe8d0e'
+    BOARD_DTB = BUNDLE + '/dtb/miro.dtb'
+    BOARD_DTB_SHA256 = '0d40ae52f09cf04b81514a8d2a1a0df78f4e81bc137dd46a54a34ec1817b7b53'
+    BOARD_SOURCE_SHA256 = '44c780827f983431ddb298e578eb832f3df9907cab5cb33284fd2757732eb7b8'
+    XBL_DTB = BUNDLE + '/dtb/xbl-config.dtb'
+    XBL_DTB_SHA256 = 'f5947a566e53b54331216e18eb167c023ca4ac2d9027a0a89cd1955f3f0383ed'
+elif TARGET == 'piano':
+    BUNDLE = 'vendor/piano'
+    MANIFEST_SHA256 = '713247b46d5e1ccd25a9df3580a3095e691ebb552dbfacd28a1c431f20e5ef66'
+    BOARD_DTB = BUNDLE + '/dtb/piano.dtb'
+    BOARD_DTB_SHA256 = '82b2404bc872c1f60eb4c54c62eb9f2094b97586bdc2aeccae9765f5f258aff1'
+    BOARD_SOURCE_SHA256 = 'a4b55dd3b77e69be451aaf2263c76f5496c93325767e49f748ee49570611e8d7'
+    XBL_DTB = BUNDLE + '/dtb/xbl-config.dtb'
+    XBL_DTB_SHA256 = '634ec73dc6d69a07b5af8246e03b0d2ae84dfb9ce9901135121c220443c9cd10'
+else:
+    raise ValueError('Unsupported SUNUEFI_TARGET: ' + TARGET)
 NATIVE_NAMES = ('SmemDxe', 'DALSys', 'ChipInfo', 'PlatformInfoDxeDriver',
                 'HWIODxeDriver', 'ULogDxe', 'CmdDbDxe', 'PwrUtilsDxe',
                 'RpmhDxe', 'NpaDxe', 'VcsDxe', 'ClockDxe', 'HALIOMMU',

@@ -60,12 +60,15 @@ STATIC EFI_STATUS EFIAPI PianoConsoleBlt(EFI_GRAPHICS_OUTPUT_PROTOCOL *This,
 }
 STATIC EFI_STATUS PianoConsoleAttach(GRAPHICS_CONSOLE_DEV *Private,UINT32 *Width,UINT32 *Height){
   EFI_GRAPHICS_OUTPUT_PROTOCOL *Physical=Private->GraphicsOutput;
-  if(!Physical||*Width!=3200||*Height!=2136)return EFI_SUCCESS;
+  UINTN Scale=0;
+  if(Physical&&*Width==3200&&*Height==2136)Scale=4;
+  else if(Physical&&*Width==1440&&*Height==3200)Scale=2;
+  if(!Scale)return EFI_SUCCESS;
   PIANO_CONSOLE_SURFACE *S=AllocateZeroPool(sizeof(*S));
   if(!S)return EFI_OUT_OF_RESOURCES;
-  S->Physical=Physical;S->Scale=4;
+  S->Physical=Physical;S->Scale=Scale;
   S->Mode=*Physical->Mode;S->Info=*Physical->Mode->Info;
-  S->Info.HorizontalResolution=*Width/4;S->Info.VerticalResolution=*Height/4;
+  S->Info.HorizontalResolution=*Width/Scale;S->Info.VerticalResolution=*Height/Scale;
   S->Info.PixelsPerScanLine=S->Info.HorizontalResolution;
   S->Info.PixelFormat=PixelBltOnly;
   S->Mode.Info=&S->Info;S->Mode.SizeOfInfo=sizeof(S->Info);
@@ -73,7 +76,9 @@ STATIC EFI_STATUS PianoConsoleAttach(GRAPHICS_CONSOLE_DEV *Private,UINT32 *Width
   S->Gop=(EFI_GRAPHICS_OUTPUT_PROTOCOL){PianoConsoleQuery,PianoConsoleSet,PianoConsoleBlt,&S->Mode};
   Private->GraphicsOutput=&S->Gop;Private->PianoConsoleSurface=S;
   *Width=S->Info.HorizontalResolution;*Height=S->Info.VerticalResolution;
-  DEBUG((DEBUG_INFO,"PIANO_CONSOLE_SCALE factor=4 physical=3200x2136 logical=800x534\n"));
+  DEBUG((DEBUG_INFO,"PIANO_CONSOLE_SCALE factor=%u physical=%ux%u logical=%ux%u\n",
+    (UINT32)Scale,Physical->Mode->Info->HorizontalResolution,Physical->Mode->Info->VerticalResolution,
+    S->Info.HorizontalResolution,S->Info.VerticalResolution));
   return EFI_SUCCESS;
 }
 STATIC VOID PianoConsoleDetach(GRAPHICS_CONSOLE_DEV *Private){

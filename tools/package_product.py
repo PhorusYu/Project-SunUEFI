@@ -53,7 +53,8 @@ def main():
     magic,version,header,app_bytes,digest=struct.unpack_from('<16sIIQ32s',payload)
     if magic!=b'SUNUEFI-APPv1\0'.ljust(16,b'\0')or version!=1 or header!=64 or app_bytes!=len(raw)or payload[64:]!=raw or digest!=hashlib.sha256(raw).digest():raise ValueError('Product APPv1 payload mismatch')
     kernel=out/'product-kernel.bin';kernel.write_bytes(gzip.compress(shim_bytes+fd_bytes,mtime=0)+dtb.read_bytes())
-    image=out/'PianoUEFI-product.img'
+    image_name='MiroUEFI-product.img' if os.environ.get('SUNUEFI_TARGET','piano')=='miro' else 'PianoUEFI-product.img'
+    image=out/image_name
     subprocess.run([sys.executable,str(ws/'Resources/Scripts/mkbootimg.py'),'--header_version',str(args.header_version),'--kernel',str(kernel),'--ramdisk',str(app/'app-payload.bin'),'-o',str(image)],check=True)
     blob=image.read_bytes();ks,rs=struct.unpack_from('<2I',blob,8)
     roff=4096+((ks+4095)//4096)*4096

@@ -26,6 +26,7 @@
 #include "PianoProductDisplayOwner.h"
 #include "PianoPogoService.h"
 #include "PianoTouchService.h"
+#include "MiroTouch.h"
 #include "LateHandoff/PianoLateHandoff.h"
 #include "LateHandoff/PianoDeviceTreeFixup.h"
 #include <Guid/EventGroup.h>
@@ -168,6 +169,13 @@ STATIC EFI_STATUS ProductReportStatus(VOID *Context,PIANO_FB_SEND Send,VOID *Sen
   STATUS_LINE("INFOrange base=%lx bytes=%lx",Memory.CheckBase,Memory.CheckBytes);
   STATUS_LINE("INFOfailure stage=%a status=%016lx",mBootLogStage,mFailureStatus);
   STATUS_LINE("INFOowners phase=%u retired=%x",mOwners.Report.Phase,mOwners.Report.RetiredMask);
+#ifdef SUNUEFI_TARGET_MIRO
+  {
+    UINT32 TId=0,TFrames=0,TEvents=0,TBad=0,TIrq=0; EFI_STATUS TSt=EFI_NOT_STARTED;
+    MiroTouchDiag(&TId,&TSt,&TFrames,&TEvents,&TBad,&TIrq);
+    STATUS_LINE("INFOmt id=%04x f=%u e=%u t=%u b=%08x",TId,TFrames,TEvents,TBad,TIrq);
+  }
+#endif
   STATUS_LINE("INFOstartup target=%u diagnostics=%u",mStartupTarget,mFailureDiagnostics);
   STATUS_LINE("INFOsmem metadata=%u repeated=%u early=%016lx",Memory.SmemRepeatedMetadataEqual,Memory.SmemRepeatedPayloadEqual,PianoProductEarlySmemStatus());
 #undef STATUS_LINE
@@ -195,7 +203,11 @@ STATIC EFI_STATUS ProductDebugReplay(VOID *Context) {
   DEBUG((DEBUG_WARN,"PIANO_EFI_IMAGE_SAVED stage=%a status=%r\n",mEfiImageStage,mEfiImageStatus));
   PianoProductMemoryReemitDiagnostic();
   PianoLateHandoffReemitDiagnostic(&mLateHandoff);
+#ifdef SUNUEFI_TARGET_MIRO
+  MiroTouchReplay();
+#else
   PianoTouchReplay();
+#endif
   PianoPogoReplay();
   if(PianoProductDisplayRetained())return Display==EFI_SUCCESS?EFI_COMPROMISED_DATA:Display;
   if(PianoDisplaySmmuRetained())return Translation==EFI_SUCCESS?EFI_COMPROMISED_DATA:Translation;
@@ -734,6 +746,16 @@ EFI_STATUS EFIAPI PianoProductCoreEntry(EFI_HANDLE Image,EFI_SYSTEM_TABLE *Syste
   // happens in the shared pump after the owner ledger below registers them
   EFI_STATUS PogoStart=PianoPogoStart(Fdt);BOOLEAN PogoStarted=PogoStart==EFI_SUCCESS;
   DEBUG((DEBUG_WARN,"PIANO_PRODUCT_POGO_START status=%r owner=%u\n",PogoStart,PogoStarted));
+#ifdef SUNUEFI_TARGET_MIRO
+  EFI_STATUS TouchStart=MiroTouchStart(Fdt);BOOLEAN TouchStarted=TouchStart==EFI_SUCCESS;
+  DEBUG((DEBUG_WARN,"MIRO_PRODUCT_TOUCH_START status=%r owner=%u\n",TouchStart,TouchStarted));
+  PIANO_PRODUCT_OWNERS_CONFIG Config={.Revision=1,.Fdt=Fdt,.ExpectedOwnerMask=PIANO_OWNER_ALL_MASK,
+    .StartedOwnerMask=(PIANO_OWNER_CORE_MASK&~(UsbStarted?0:PIANO_OWNER_USB))|(mDisplayStartup.Held?PIANO_OWNER_DISPLAY:0)|(PogoStarted?PIANO_OWNER_POGO:0)|(TouchStarted?PIANO_OWNER_TOUCH:0),
+    .AbsentOwnerMask=PIANO_OWNER_USB_HOST|PIANO_OWNER_GPI|(PogoStarted?0:PIANO_OWNER_POGO)|(TouchStarted?0:PIANO_OWNER_TOUCH)|(UsbStarted?0:PIANO_OWNER_USB)|(mDisplayStartup.Held?0:PIANO_OWNER_DISPLAY),
+    .StartupUsbProof=UsbStarted?NULL:&mStartupUsbProof,
+    .Runtime=Runtime,.InputContext=NULL,.StopInput=StopInput,.PogoContext=NULL,.StopPogo=PianoPogoStop,.TouchContext=NULL,.StopTouch=MiroTouchStop,
+    .DisplayContext=mDisplayStartup.LeaseContext,.StopDisplay=PianoProductDisplayStop,.DisplayStartup=mDisplayStartup};
+#else
   EFI_STATUS TouchStart=PianoTouchStart(Fdt);BOOLEAN TouchStarted=TouchStart==EFI_SUCCESS;
   DEBUG((DEBUG_WARN,"PIANO_PRODUCT_TOUCH_START status=%r owner=%u\n",TouchStart,TouchStarted));
   // Touch owns the GPI channels and closes their domain before USB and UFS.
@@ -743,6 +765,7 @@ EFI_STATUS EFIAPI PianoProductCoreEntry(EFI_HANDLE Image,EFI_SYSTEM_TABLE *Syste
     .StartupUsbProof=UsbStarted?NULL:&mStartupUsbProof,
     .Runtime=Runtime,.InputContext=NULL,.StopInput=StopInput,.PogoContext=NULL,.StopPogo=PianoPogoStop,.TouchContext=NULL,.StopTouch=PianoTouchStop,
     .DisplayContext=mDisplayStartup.LeaseContext,.StopDisplay=PianoProductDisplayStop,.DisplayStartup=mDisplayStartup};
+#endif
   Status=PianoProductOwnersInitialize(&mOwners,&Config);if(Status!=EFI_SUCCESS)FailStop(Status);
   PIANO_LATE_HANDOFF_ENV Late={.Context=Image,.Services=gBS,.SystemTable=SystemTable,
     .ParentImage=Image,.Owners=&mOwners,.BootServicesAlive=LateServicesAlive,

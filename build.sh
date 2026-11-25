@@ -7,7 +7,18 @@ if (($#)); then shift; fi
 case "$command" in
   sources) python3 tools/prepare_sources.py "$@" ;;
   check) python3 tools/check_host.py --group portable "$@" ;;
-  uefi) make uefi ;;
+  uefi)
+    while (($#)); do
+      case "$1" in
+        --target)
+          [[ $# -ge 2 ]] || { echo '--target requires a value (piano|miro)' >&2; exit 2; }
+          export SUNUEFI_TARGET="$2"; shift 2;;
+        --target=*)
+          export SUNUEFI_TARGET="${1#--target=}"; shift;;
+        *) echo "Unknown uefi argument: $1" >&2; exit 2;;
+      esac
+    done
+    make uefi ;;
   trampoline) python3 tools/package_product_trampoline.py "$@" ;;
   module) python3 tools/build_android_product_module.py "$@" ;;
   module-package) python3 tools/build_android_module.py "$@" ;;

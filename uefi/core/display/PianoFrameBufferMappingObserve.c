@@ -8,7 +8,15 @@
 #include <Library/DebugLib.h>
 STATIC PIANO_FB_MAPPING_REPORT mReport={.Revision=1};
 STATIC BOOLEAN mBusy;
+#ifdef SUNUEFI_TARGET_MIRO
+STATIC CONST UINT64 mPages[]={PIANO_FB_MAPPING_BASE,0xfd0ca000ULL,0xfd993000ULL};
+#define PIANO_FB_EXPECTED_WIDTH 1440
+#define PIANO_FB_EXPECTED_HEIGHT 3200
+#else
 STATIC CONST UINT64 mPages[]={PIANO_FB_MAPPING_BASE,0xfd509000ULL,0xfe212000ULL};
+#define PIANO_FB_EXPECTED_WIDTH 3200
+#define PIANO_FB_EXPECTED_HEIGHT 2136
+#endif
 STATIC EFI_STATUS Exact(EFI_STATUS S){return S==EFI_SUCCESS||EFI_ERROR(S)?S:EFI_DEVICE_ERROR;}
 STATIC BOOLEAN Live(PIANO_FB_MAPPING_ALIVE Alive,PIANO_FB_MAPPING_SNAPSHOT *S){
   if(mReport.ServicesLost||Alive()!=TRUE){mReport.ServicesLost=TRUE;if(S){S->ServicesLost=TRUE;S->Status=EFI_ABORTED;}return FALSE;}return TRUE;
@@ -74,7 +82,7 @@ STATIC EFI_STATUS Metadata(PIANO_FB_MAPPING_ALIVE Alive,PIANO_FB_MAPPING_SNAPSHO
   R->Width=G->Mode->Info->HorizontalResolution;R->Height=G->Mode->Info->VerticalResolution;
   R->Stride=G->Mode->Info->PixelsPerScanLine;R->Format=(UINT32)G->Mode->Info->PixelFormat;
   return R->Base==PIANO_FB_MAPPING_BASE&&R->Bytes==PIANO_FB_MAPPING_BYTES&&
-    R->Width==3200&&R->Height==2136&&R->Stride==3200&&R->Format==PixelBlueGreenRedReserved8BitPerColor?EFI_SUCCESS:EFI_SECURITY_VIOLATION;
+    R->Width==PIANO_FB_EXPECTED_WIDTH&&R->Height==PIANO_FB_EXPECTED_HEIGHT&&R->Stride==PIANO_FB_EXPECTED_WIDTH&&R->Format==PixelBlueGreenRedReserved8BitPerColor?EFI_SUCCESS:EFI_SECURITY_VIOLATION;
 }
 STATIC VOID Emit(CONST PIANO_FB_MAPPING_SNAPSHOT *S){
   DEBUG((DEBUG_WARN,"PIANO_FB_MAP phase=%a status=%r rounds=%u samples=%u coherent=%u lost=%u no_target_load=1 whole_range_ready=0\n",
