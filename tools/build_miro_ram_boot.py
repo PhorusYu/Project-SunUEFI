@@ -171,6 +171,14 @@ def build_miro_dtb(src_dtb: Path, out_dtb: Path, work_dir: Path) -> None:
 	soc@0 {{
 		pinctrl@f100000 {{
 			gpio-reserved-ranges = <36 4 48 4 74 1>;
+
+			sde_te_active: sde-te-active-state {{
+				pins = "gpio86";
+				function = "mdp_vsync";
+				drive-strength = <2>;
+				bias-pull-down;
+				phandle = <0x7ffe>;
+			}};
 		}};
 
 		usb@a600000 {{
@@ -189,6 +197,10 @@ def build_miro_dtb(src_dtb: Path, out_dtb: Path, work_dir: Path) -> None:
 
 		display-subsystem@ae00000 {{
 			status = "okay";
+			display-controller@ae01000 {{
+				pinctrl-names = "default";
+				pinctrl-0 = <0x7ffe>;
+			}};
 			dsi@ae94000 {{
 				panel@0 {{
 					compatible = "xiaomi,miro-o11u";

@@ -1,0 +1,275 @@
+diff --git a/drivers/gpu/drm/msm/dsi/dsi_host.c b/drivers/gpu/drm/msm/dsi/dsi_host.c
+index a3d0e7795..2cff22a90 100644
+--- a/drivers/gpu/drm/msm/dsi/dsi_host.c
++++ b/drivers/gpu/drm/msm/dsi/dsi_host.c
+@@ -1928,8 +1928,9 @@ static int dsi_populate_dsc_params(struct msm_dsi_host *msm_host, struct drm_dsc
+ 	drm_dsc_set_const_params(dsc);
+ 	drm_dsc_set_rc_buf_thresh(dsc);
+ 
+-	/* DPU supports only pre-SCR panels */
+-	ret = drm_dsc_setup_rc_params(dsc, DRM_DSC_1_1_PRE_SCR);
++	ret = drm_dsc_setup_rc_params(dsc,
++				      dsc->dsc_version_minor == 2 ?
++				      DRM_DSC_1_2_444 : DRM_DSC_1_1_PRE_SCR);
+ 	if (ret) {
+ 		DRM_DEV_ERROR(&msm_host->pdev->dev, "could not find DSC RC parameters\n");
+ 		return ret;
+diff --git a/drivers/gpu/drm/panel/panel-novatek-nt37801.c b/drivers/gpu/drm/panel/panel-novatek-nt37801.c
+index 5e46c4c6d..29a81a89d 100644
+--- a/drivers/gpu/drm/panel/panel-novatek-nt37801.c
++++ b/drivers/gpu/drm/panel/panel-novatek-nt37801.c
+@@ -6,6 +6,7 @@
+ #include <linux/gpio/consumer.h>
+ #include <linux/regulator/consumer.h>
+ #include <linux/module.h>
++#include <linux/of.h>
+ 
+ #include <drm/display/drm_dsc.h>
+ #include <drm/display/drm_dsc_helper.h>
+@@ -22,6 +23,7 @@ struct novatek_nt37801 {
+ 	struct drm_dsc_config dsc;
+ 	struct gpio_desc *reset_gpio;
+ 	struct regulator_bulk_data *supplies;
++	bool is_o11u;
+ };
+ 
+ static const struct regulator_bulk_data novatek_nt37801_supplies[] = {
+@@ -103,6 +105,151 @@ static void novatek_nt37801_on(struct mipi_dsi_multi_context *dsi_ctx)
+ 	mipi_dsi_msleep(dsi_ctx, 20);
+ }
+ 
++static void xiaomi_o11u_on(struct mipi_dsi_multi_context *dsi_ctx)
++{
++	dsi_ctx->dsi->mode_flags |= MIPI_DSI_MODE_LPM;
++	{ static const u8 d[] = { 0x2a, 0x00, 0x00, 0x05, 0x9f }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x2b, 0x00, 0x00, 0x0c, 0x7f }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x90, 0x03, 0x43 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x91, 0xab, 0xa8, 0x00, 0x14, 0xc2, 0x00, 0x02, 0x68, 0x02, 0x2e, 0x00, 0x0a, 0x05, 0x0e, 0x03, 0xd1, 0x10, 0xf0 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xf0, 0x55, 0xaa, 0x52, 0x08, 0x07 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xb0, 0x84, 0x40, 0x01, 0x00, 0x00 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x2f, 0x02 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x51, 0x00, 0x00 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x6f, 0x04 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x51, 0x0f, 0xff }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x53, 0x20 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x35, 0x00 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x6f, 0x01 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x8b, 0x00 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xf0, 0x55, 0xaa, 0x52, 0x08, 0x01 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x6f, 0xa2 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xe7, 0xff, 0xff, 0xff, 0xff, 0xff }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x6f, 0x11 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xe7, 0x08 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xf0, 0x55, 0xaa, 0x52, 0x08, 0x00 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xc7, 0x33 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x6f, 0x31 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xc0, 0x00, 0x10 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x6f, 0x35 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xc0, 0x22, 0x40 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xf0, 0x55, 0xaa, 0x52, 0x08, 0x04 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xc0, 0x20 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xf0, 0x55, 0xaa, 0x52, 0x08, 0x04 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xca, 0x01 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xf0, 0x55, 0xaa, 0x52, 0x08, 0x01 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x6f, 0x05 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xe7, 0xc5, 0x0a, 0x0a }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xf0, 0x55, 0xaa, 0x52, 0x08, 0x08 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xe8, 0x11, 0x90, 0x00, 0x00, 0x00, 0x20 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x6f, 0x06 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xe8, 0x00, 0x70, 0x74, 0x74, 0x78, 0x78, 0x7c, 0x7c, 0x7c, 0x7c, 0x7c, 0x7c, 0x7c, 0x7c, 0x78, 0x78, 0x74, 0x74, 0x70, 0x70, 0x64, 0x64, 0x64 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x6f, 0x1d }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xe8, 0x00, 0x64, 0x6c, 0x6c, 0x80, 0x80, 0x88, 0x88, 0x88, 0x88, 0x8c, 0x8c, 0x8c, 0x8c, 0x88, 0x88, 0x84, 0x84, 0x84, 0x84, 0x70, 0x70, 0x70 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x6f, 0x34 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xe8, 0xe8, 0x00, 0xa4, 0xa8, 0xa8, 0xa8, 0xa8, 0xa8, 0xa8, 0xac, 0xac, 0xac, 0xac, 0xac, 0xac, 0xa8, 0xa8, 0xa4, 0xa4, 0xa4, 0xa4, 0x8c, 0x8c, 0x8c }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xe8, 0xf0, 0x55, 0xaa, 0x52, 0x08, 0x08 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xe8, 0xe0, 0x01, 0x01, 0x01, 0x01 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x6f, 0x06 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xe0, 0x80, 0x00, 0x21, 0x32, 0x43, 0x54, 0x65, 0x76, 0x87, 0x98, 0x99, 0x99, 0x99 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xe8, 0xe1, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01, 0x03, 0x03 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x6f, 0x0e }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xe8, 0xe1, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x03, 0x03, 0x06, 0x07 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x6f, 0x1c }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xe8, 0xe1, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x04, 0x05, 0x0a, 0x0b }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x6f, 0x2a }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xe8, 0xe1, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x04, 0x06, 0x07, 0x0b, 0x0c }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x6f, 0x38 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xe8, 0xe1, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01, 0x04, 0x07, 0x09, 0x0a, 0x0c, 0x0e }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x6f, 0x46 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xe8, 0xe1, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01, 0x01, 0x03, 0x04, 0x06, 0x07, 0x09, 0x0a, 0x0b }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x6f, 0x54 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xe8, 0xe1, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01, 0x01, 0x03, 0x04, 0x06, 0x07, 0x09, 0x0a, 0x0b }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x6f, 0x62 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xe8, 0xe1, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01, 0x01, 0x03, 0x05, 0x08, 0x0c, 0x0d, 0x0e }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x6f, 0x70 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xe8, 0xe1, 0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x02, 0x03, 0x05, 0x06, 0x09, 0x0b, 0x0e, 0x10 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xe8, 0xe2, 0x01, 0x01, 0x01, 0x02, 0x19, 0x1a, 0x10, 0x0f, 0x0f, 0x17, 0x08, 0x12, 0x15, 0x1e }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x6f, 0x0e }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xe8, 0xe2, 0x04, 0x08, 0x0b, 0x0f, 0x11, 0x11, 0x13, 0x13, 0x0c, 0x0c, 0x0a, 0x0b, 0x12, 0x13 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x6f, 0x1c }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xe8, 0xe2, 0x02, 0x04, 0x05, 0x07, 0x0a, 0x0d, 0x0f, 0x0d, 0x06, 0x09, 0x0a, 0x0e, 0x0f, 0x10 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x6f, 0x2a }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xe8, 0xe2, 0x02, 0x04, 0x0a, 0x0b, 0x02, 0x03, 0x06, 0x07, 0x07, 0x09, 0x0b, 0x0c, 0x0f, 0x12 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x6f, 0x38 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xe8, 0xe2, 0x03, 0x05, 0x05, 0x08, 0x02, 0x02, 0x04, 0x05, 0x05, 0x08, 0x0b, 0x0d, 0x10, 0x11 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x6f, 0x46 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xe8, 0xe2, 0x02, 0x02, 0x03, 0x05, 0x02, 0x01, 0x04, 0x05, 0x07, 0x09, 0x0a, 0x0c, 0x0f, 0x11 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x6f, 0x54 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xe8, 0xe2, 0x02, 0x02, 0x03, 0x05, 0x02, 0x01, 0x04, 0x05, 0x07, 0x09, 0x0a, 0x0c, 0x0f, 0x11 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x6f, 0x62 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xe8, 0xe2, 0x01, 0x01, 0x02, 0x02, 0x01, 0x01, 0x03, 0x03, 0x07, 0x08, 0x09, 0x0d, 0x0d, 0x11 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x6f, 0x70 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xe8, 0xe2, 0x00, 0x00, 0x01, 0x01, 0x01, 0x01, 0x03, 0x04, 0x06, 0x08, 0x09, 0x0b, 0x0f, 0x11 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xe8, 0xe3, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x02, 0x07, 0x07 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x6f, 0x0e }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xe8, 0xe3, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01, 0x01, 0x02, 0x04, 0x04, 0x0e, 0x0e }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x6f, 0x1c }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xe8, 0xe3, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01, 0x01, 0x01, 0x04, 0x03, 0x05, 0x08, 0x0e }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x6f, 0x2a }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xe8, 0xe3, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x02, 0x02, 0x06, 0x08, 0x0c, 0x0d, 0x0f }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x6f, 0x38 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xe8, 0xe3, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x02, 0x05, 0x06, 0x0a, 0x0a, 0x0c, 0x0f }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x6f, 0x46 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xe8, 0xe3, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x02, 0x04, 0x07, 0x06, 0x0a, 0x0b, 0x0d }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x6f, 0x54 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xe8, 0xe3, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x02, 0x04, 0x07, 0x06, 0x0a, 0x0b, 0x0d }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x6f, 0x62 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xe8, 0xe3, 0x00, 0x00, 0x01, 0x01, 0x01, 0x02, 0x03, 0x04, 0x05, 0x07, 0x0a, 0x0c, 0x0f, 0x11 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x6f, 0x70 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xe8, 0xe3, 0x00, 0x01, 0x01, 0x01, 0x01, 0x01, 0x02, 0x03, 0x06, 0x07, 0x0a, 0x0d, 0x0f, 0x12 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xea, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xe4, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xe5, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xe6, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xf0, 0x55, 0xaa, 0x52, 0x08, 0x08 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xe8, 0x11 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xe0, 0x01 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xf0, 0x55, 0xaa, 0x52, 0x08, 0x00 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xbe, 0x47, 0x45 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x6f, 0x05 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xbe, 0x08 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xf0, 0x55, 0xaa, 0x52, 0x08, 0x03 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xc8, 0x01, 0x02, 0x03 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xff, 0xaa, 0x55, 0xa5, 0x80 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x6f, 0x22 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xfe, 0x06 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xff, 0xaa, 0x55, 0xa5, 0x82 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x6f, 0x05 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xf3, 0x11 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xf0, 0x55, 0xaa, 0x52, 0x08, 0x01 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x6f, 0x05 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xc5, 0x0a, 0x0a }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xf0, 0x55, 0xaa, 0x52, 0x08, 0x00 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x6f, 0x78 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xb0, 0x11, 0x00, 0x2a, 0x00, 0xc2, 0x01, 0xda, 0x03, 0x7c, 0x05, 0xb1, 0x08, 0x80, 0x0b, 0xee, 0x0f, 0xff, 0x05, 0x55, 0x05, 0x56, 0x05, 0x55 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x6f, 0x6f }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xb0, 0x02, 0xd0, 0x05, 0xa0, 0x02, 0xd0 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xf0, 0x55, 0xaa, 0x52, 0x08, 0x08 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xc1, 0x8c, 0xff, 0xcc, 0xff, 0xff, 0xcc, 0xff, 0xff, 0xcc, 0xff, 0xff, 0xec, 0xff, 0x7f, 0xee, 0x7f, 0x7f, 0xff, 0x7f, 0xff, 0x0e, 0x7f }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x6f, 0x20 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xc1, 0x4f, 0x00, 0xff }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x6f, 0x23 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xc1, 0x0c, 0xff, 0xcc, 0xff, 0xff, 0xcc, 0xff, 0xff, 0xcc, 0xff, 0xff, 0xec, 0xff, 0x7f, 0xee, 0x7f, 0x7f, 0xcf, 0x7f, 0x0a }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xf0, 0x55, 0xaa, 0x52, 0x08, 0x07 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xc0, 0x87 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xa9, 0x02, 0x01, 0xc3, 0x00, 0x00, 0x99, 0x02, 0x01, 0xc3, 0x30, 0x30, 0x00, 0x02, 0x01, 0xc3, 0x0b, 0x0d, 0x3f, 0x20, 0x2f, 0x02, 0x01, 0xc3, 0x11, 0x13, 0x3f, 0x70, 0x2f, 0x02, 0x01, 0xc3, 0x17, 0x17, 0x3f, 0x02, 0x01, 0xc3, 0x18, 0x19, 0x26, 0x2f, 0x02, 0x01, 0xc3, 0x1d, 0x1f, 0x3f, 0x20, 0x2f, 0x02, 0x01, 0xc3, 0x23, 0x25, 0x3f, 0x3a, 0x2f, 0x02, 0x01, 0xc3, 0x0e, 0x0f, 0x3f, 0x62, 0x02, 0x01, 0xc3, 0x10, 0x10, 0xde, 0x02, 0x01, 0xc3, 0x14, 0x16, 0x3f, 0x62, 0xde, 0x02, 0x01, 0xc3, 0x1a, 0x1c, 0x3f, 0x62, 0xde, 0x02, 0x01, 0xc3, 0x20, 0x22, 0x3f, 0x62, 0xde, 0x02, 0x01, 0xc3, 0x26, 0x27, 0x3f, 0x62, 0x02, 0x01, 0xc3, 0x28, 0x28, 0xde, 0x02, 0x01, 0xc3, 0x29, 0x2b, 0x11, 0x11, 0x01, 0x02, 0x01, 0xc3, 0x2c, 0x2e, 0x00, 0x00, 0x00, 0x02, 0x01, 0xc3, 0x31, 0x32, 0xaa, 0x02, 0x02, 0x01, 0xc3, 0x33, 0x34, 0xaa, 0x02, 0x02, 0x01, 0xc3, 0x04, 0x04, 0xe3, 0x02, 0x01, 0xc3, 0x09, 0x09, 0xe4, 0x02, 0x01, 0xc3, 0x01, 0x01, 0x29, 0x02, 0x01, 0xc3, 0x06, 0x06, 0x29, 0x02, 0x01, 0xc3, 0x02, 0x03, 0x02, 0x70, 0x02, 0x01, 0xc3, 0x08, 0x08, 0x70, 0x02, 0x01, 0xea, 0x00, 0x00, 0x11, 0x02, 0x01, 0xea, 0x07, 0x07, 0x01, 0x02, 0x01, 0xea, 0x08, 0x08, 0x39, 0x02, 0x01, 0xea, 0x0b, 0x0b, 0x11, 0x02, 0x01, 0xea, 0x12, 0x13, 0x01, 0xac, 0x02, 0x01, 0xea, 0x1a, 0x1b, 0x01, 0x39, 0x02, 0x01, 0xea, 0x1c, 0x1d, 0x01, 0xac, 0x02, 0x01, 0xc3, 0x04, 0x04, 0xea, 0x02, 0x01, 0xc3, 0x09, 0x09, 0xea, 0x02, 0x01, 0xc3, 0x2f, 0x2f, 0x77 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xf0, 0x55, 0xaa, 0x52, 0x08, 0x01 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xe4, 0x90 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x6f, 0x0a }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xe4, 0x90 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x11 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	mipi_dsi_msleep(dsi_ctx, 120);
++	{ static const u8 d[] = { 0xf0, 0x55, 0xaa, 0x52, 0x08, 0x04 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0xeb, 0x01 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++	{ static const u8 d[] = { 0x29 }; mipi_dsi_dcs_write_buffer_multi(dsi_ctx, d, sizeof(d)); }
++}
++
+ static int novatek_nt37801_off(struct novatek_nt37801 *ctx)
+ {
+ 	struct mipi_dsi_device *dsi = ctx->dsi;
+@@ -133,7 +280,10 @@ static int novatek_nt37801_prepare(struct drm_panel *panel)
+ 		return ret;
+ 
+ 	novatek_nt37801_reset(ctx);
+-	novatek_nt37801_on(&dsi_ctx);
++	if (ctx->is_o11u)
++		xiaomi_o11u_on(&dsi_ctx);
++	else
++		novatek_nt37801_on(&dsi_ctx);
+ 	drm_dsc_pps_payload_pack(&pps, &ctx->dsc);
+ 	mipi_dsi_picture_parameter_set_multi(&dsi_ctx, &pps);
+ 	mipi_dsi_compression_mode_multi(&dsi_ctx, true);
+@@ -185,11 +335,25 @@ static const struct drm_display_mode novatek_nt37801_mode = {
+ 	.type = DRM_MODE_TYPE_DRIVER,
+ };
+ 
++static const struct drm_display_mode xiaomi_o11u_mode = {
++	.clock = (1440 + 64 + 12 + 64) * (3200 + 16 + 14 + 6) * 120 / 1000,
++	.hdisplay = 1440,
++	.hsync_start = 1440 + 64,
++	.hsync_end = 1440 + 64 + 12,
++	.htotal = 1440 + 64 + 12 + 64,
++	.vdisplay = 3200,
++	.vsync_start = 3200 + 16,
++	.vsync_end = 3200 + 16 + 14,
++	.vtotal = 3200 + 16 + 14 + 6,
++	.type = DRM_MODE_TYPE_DRIVER,
++};
++
+ static int novatek_nt37801_get_modes(struct drm_panel *panel,
+ 				     struct drm_connector *connector)
+ {
++	struct novatek_nt37801 *ctx = to_novatek_nt37801(panel);
+ 	return drm_connector_helper_get_modes_fixed(connector,
+-						    &novatek_nt37801_mode);
++						    ctx->is_o11u ? &xiaomi_o11u_mode : &novatek_nt37801_mode);
+ }
+ 
+ static const struct drm_panel_funcs novatek_nt37801_panel_funcs = {
+@@ -257,12 +421,13 @@ static int novatek_nt37801_probe(struct mipi_dsi_device *dsi)
+ 		return dev_err_probe(dev, PTR_ERR(ctx->reset_gpio),
+ 				     "Failed to get reset-gpios\n");
+ 
++	ctx->is_o11u = of_device_is_compatible(dev->of_node, "xiaomi,miro-o11u");
+ 	ctx->dsi = dsi;
+ 	mipi_dsi_set_drvdata(dsi, ctx);
+ 
+ 	dsi->lanes = 4;
+ 	dsi->format = MIPI_DSI_FMT_RGB888;
+-	dsi->mode_flags = MIPI_DSI_MODE_NO_EOT_PACKET | MIPI_DSI_CLOCK_NON_CONTINUOUS;
++	dsi->mode_flags = ctx->is_o11u ? 0 : (MIPI_DSI_MODE_NO_EOT_PACKET | MIPI_DSI_CLOCK_NON_CONTINUOUS);
+ 
+ 	ctx->panel.prepare_prev_first = true;
+ 	ctx->panel.backlight = novatek_nt37801_create_backlight(dsi);
+@@ -275,11 +440,19 @@ static int novatek_nt37801_probe(struct mipi_dsi_device *dsi)
+ 	/* This panel only supports DSC; unconditionally enable it */
+ 	dsi->dsc = &ctx->dsc;
+ 	ctx->dsc.dsc_version_major = 1;
+-	ctx->dsc.dsc_version_minor = 1;
+-	ctx->dsc.slice_height = 40;
+-	ctx->dsc.slice_width = 720;
+-	ctx->dsc.slice_count = 1440 / ctx->dsc.slice_width;
+-	ctx->dsc.bits_per_component = 8;
++	if (ctx->is_o11u) {
++		ctx->dsc.dsc_version_minor = 2;
++		ctx->dsc.slice_height = 20;
++		ctx->dsc.slice_width = 720;
++		ctx->dsc.slice_count = 1440 / ctx->dsc.slice_width;
++		ctx->dsc.bits_per_component = 10;
++	} else {
++		ctx->dsc.dsc_version_minor = 1;
++		ctx->dsc.slice_height = 40;
++		ctx->dsc.slice_width = 720;
++		ctx->dsc.slice_count = 1440 / ctx->dsc.slice_width;
++		ctx->dsc.bits_per_component = 8;
++	}
+ 	ctx->dsc.bits_per_pixel = 8 << 4; /* 4 fractional bits */
+ 	ctx->dsc.block_pred_enable = true;
+ 
+@@ -306,6 +479,7 @@ static void novatek_nt37801_remove(struct mipi_dsi_device *dsi)
+ 
+ static const struct of_device_id novatek_nt37801_of_match[] = {
+ 	{ .compatible = "novatek,nt37801" },
++	{ .compatible = "xiaomi,miro-o11u" },
+ 	{}
+ };
+ MODULE_DEVICE_TABLE(of, novatek_nt37801_of_match);
