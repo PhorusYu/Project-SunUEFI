@@ -13,7 +13,10 @@ RECEIPT="$STATE/android-expansion.json"
 mkdir -p "$STATE"
 chmod 700 "$STATE"
 [ "$(id -u)" = 0 ] || { echo '需要 Root 权限。' >&2; exit 1; }
-[ "$(getprop ro.product.device)" = piano ] || { echo '此工具只支持小米平板 8 Pro。' >&2; exit 1; }
+case "$(getprop ro.product.device)" in
+  piano|miro) ;;
+  *) echo '此工具只支持 piano / miro。' >&2; exit 1 ;;
+esac
 [ -x "$NATIVE" ] || { echo '存储组件未安装，请更新模块。' >&2; exit 1; }
 
 valid_id() {

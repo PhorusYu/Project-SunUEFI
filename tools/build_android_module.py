@@ -79,10 +79,11 @@ def product_payload(folder):
     require(not (folder / '.incomplete').exists(), 'Product bundle is incomplete')
     meta = read_json(folder / 'manifest.json')
     files = meta.get('files', {})
-    image = read_file(child(folder, 'PianoUEFI-product.img'))
+    img_name = 'MiroUEFI-product.img' if 'MiroUEFI-product.img' in files else 'PianoUEFI-product.img'
+    image = read_file(child(folder, img_name))
     fd = read_file(child(folder, 'PianoUEFI-product.fd'))
     shim = read_file(child(folder, 'BootShim.bin'))
-    for name, data in (('PianoUEFI-product.img', image), ('PianoUEFI-product.fd', fd), ('BootShim.bin', shim)):
+    for name, data in ((img_name, image), ('PianoUEFI-product.fd', fd), ('BootShim.bin', shim)):
         checked(data, files.get(name), name)
     require(len(image) >= 4096 and image[:8] == b'ANDROID!', 'Invalid product Android header')
     kernel_bytes, ramdisk_bytes = struct.unpack_from('<II', image, 8)
