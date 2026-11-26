@@ -84,10 +84,23 @@ def build_miro_dtb(src_dtb: Path, out_dtb: Path, work_dir: Path) -> None:
     dts_file = work_dir / "miro-ram.dts"
     subprocess.run(["dtc", "-I", "dtb", "-O", "dts", "-o", str(dts_file), str(src_dtb)], check=True)
     dts_text = dts_file.read_text()
+    tlmm_ph = find_phandle(dts_text, r"pinctrl@f100000\s*\{")
     l2g_ph = find_phandle(dts_text, r'regulator-name\s*=\s*"vreg_l2g_1p8";')
 
     overlay = f"""
 / {{
+	display_panel_vddd: regulator-vddd {{
+		compatible = "regulator-fixed";
+		regulator-name = "display_panel_vddd";
+		regulator-min-microvolt = <1060000>;
+		regulator-max-microvolt = <1060000>;
+		gpio = <{tlmm_ph} 120 0>;
+		enable-active-high;
+		regulator-boot-on;
+		regulator-always-on;
+		phandle = <0x7fff>;
+	}};
+
 	chosen {{
 		#address-cells = <0x02>;
 		#size-cells = <0x02>;
@@ -143,11 +156,14 @@ def build_miro_dtb(src_dtb: Path, out_dtb: Path, work_dir: Path) -> None:
 		}};
 
 		display-subsystem@ae00000 {{
-			status = "disabled";
+			status = "okay";
 			dsi@ae94000 {{
 				panel@0 {{
 					compatible = "xiaomi,miro-o11u";
+					reset-gpios = <{tlmm_ph} 98 1>;
 					vddio-supply = <{l2g_ph}>;
+					vdd-supply = <0x7fff>;
+					/delete-property/ vci-supply;
 				}};
 			}};
 		}};
