@@ -483,7 +483,7 @@ def prepare(root=ROOT):
     header,app_identity=digest_header(product_app/'SimpleInit.efi')
     raw=(product_app/'SimpleInit.efi').read_bytes()
     (product_app/'app-payload.bin').write_bytes(struct.pack('<16sIIQ32s',b'SUNUEFI-APPv1\0',1,64,len(raw),hashlib.sha256(raw).digest())+raw)
-    probe_name='miroProbe' if vendor_inputs.TARGET=='miro' else 'pianoProbe'
+    probe_name='miro' if vendor_inputs.TARGET=='miro' else 'pianoProbe'
     target=root/'uefi/platforms/pianoProductPkg'
     if target.exists():shutil.rmtree(target)
     shutil.copytree(root/'uefi/platforms'/(probe_name+'Pkg'),target)
@@ -492,7 +492,7 @@ def prepare(root=ROOT):
             path.write_text(path.read_text().replace(probe_name,'pianoProduct'))
     for suffix in ('dsc','dec','fdf'):(target/f'{probe_name}.{suffix}').rename(target/f'pianoProduct.{suffix}')
     shutil.rmtree(target/'Library/Stage0BootManagerLib')
-    shutil.rmtree(target/'Library/RamLogSerialPortLib')
+    if (target/'Library/RamLogSerialPortLib').exists():shutil.rmtree(target/'Library/RamLogSerialPortLib')
     shutil.copytree(root/'uefi/components/product-support',target,dirs_exist_ok=True)
     shutil.copytree(root/'uefi/components/acpi',target/'AcpiTables')
     app=target/'Applications/ProductCore';app.mkdir(parents=True)

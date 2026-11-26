@@ -2,7 +2,7 @@
 
 [简体中文](README.md)
 
-SunUEFI lets the Xiaomi Pad 8 Pro (`piano`) boot Linux from internal storage without replacing the stock Android system. It adapts EDK2 UEFI firmware and mainline-based Linux to the Snapdragon 8 Elite (SM8750) platform. At startup you can choose between HyperOS and UEFI; Android data and the stock Recovery stay in place. Linux is available now. Windows on Arm does not boot yet, and support for the [UniXNU](https://github.com/UniXNU/UniXNU) boot chain is planned.
+SunUEFI lets the Xiaomi Pad 8 Pro (`piano`) boot Linux from internal storage without replacing the stock Android system. It adapts EDK2 UEFI firmware and mainline-based Linux to the Snapdragon 8 Elite (SM8750) platform. At startup you can choose between HyperOS and UEFI; Android data and the stock Recovery stay in place. Linux is available now. Windows on Arm does not boot yet, and support for the [UniXNU](https://github.com/UniXNU/UniXNU) boot chain is planned. Preliminary Stage-0 UEFI support is also available for Redmi K80 Pro / POCO F7 Ultra (`miro`, `./build.sh uefi --target miro`; Linux bring-up is WIP).
 
 [Install Linux](#install-linux) · [Hardware support](#hardware-support) · [Known issues](docs/user/known-issues.md) · [Recovery](docs/user/recovery.md)
 

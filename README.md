@@ -10,7 +10,7 @@
 > **官方交流群**：[SunUEFI 官方交流群（骁龙 8E）](https://qm.qq.com/q/C1RkQC2yYw) 
 > 群号 **1135414849** 强烈推荐加群交流，跟进最新进展，获取帮助和反馈问题
 
-面向骁龙 8E（SM8750，骁龙 8 至尊版）平台的 EDK2 UEFI 固件与多系统启动适配。首台设备小米平板 8 Pro（`piano`）的主线 Linux 内核和桌面系统已完成完整体验适配，可通过统一的 UEFI 保留原厂 Android 并启动 Linux。Linux 已经能用，Windows on ARM 还没有启动，macOS / iOS 的 UEFI 启动链（[UniXNU](https://github.com/UniXNU/UniXNU)）适配在规划中。
+面向骁龙 8E（SM8750，骁龙 8 至尊版）平台的 EDK2 UEFI 固件与多系统启动适配。首台设备小米平板 8 Pro（`piano`）的主线 Linux 内核和桌面系统已完成完整体验适配，可通过统一的 UEFI 保留原厂 Android 并启动 Linux。Linux 已经能用，Windows on ARM 还没有启动，macOS / iOS 的 UEFI 启动链（[UniXNU](https://github.com/UniXNU/UniXNU)）适配在规划中。另已初步适配 Redmi K80 Pro / POCO F7 Ultra（`miro`，`./build.sh uefi --target miro`，当前完成 Stage-0 UEFI，Linux 尚在适配）。
 平台性能不差，但只能跑原厂平庸的安卓系统。我们给它加了一套自己的 UEFI，让它能从内部存储启动 Debian、Nyarch 或 SteamOS，想回 Android 随时可以回，Android 数据和原厂 Recovery 都保留。
 
 ## 为什么选择 SunUEFI

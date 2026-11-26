@@ -22,7 +22,7 @@
   SUPPORTED_ARCHITECTURES        = AARCH64
   BUILD_TARGETS                  = RELEASE|DEBUG
   SKUID_IDENTIFIER               = DEFAULT
-  FLASH_DEFINITION               = miroPkg/piano.fdf
+  FLASH_DEFINITION               = miroPkg/miro.fdf
   USE_CUSTOM_DISPLAY_DRIVER      = 0
 
   #

@@ -6,6 +6,8 @@
 
 维护者使用小米平板 8 Pro（`piano`，型号 `25091RP04C`，SM8750P，16 GB 内存），原厂系统为 Android 17／HyperOS 4（`OS4.0.6.0.XPYCNXM`），Bootloader 已解锁。Linux 按原厂引导程序传来的标识选择 BOE／CSOT 面板，见[面板选择](devel/hardware/panel-selection.md)。合体 BOOT 支持国行和国际版 Piano。
 
+另已初步适配 Redmi K80 Pro / POCO F7 Ultra（`miro`，SM8750）：Stage-0 UEFI（SimpleFb 显示、FT3683 触屏、UEFI Fastboot）可用，Linux 尚在适配中。
+
 Linux 使用独立的 `sunuefi_esp`（FAT32 启动分区）和 `sunuefi_root`（ext4 系统分区）。镜像共用 Linux 7.3.3、设备支持包和固件；系统分区首次启动会自动扩展到分区容量。系统和桌面选项见[快速上手](user/getting-started.md#选一个系统)。
 
 ## 启动与安装

@@ -98,7 +98,7 @@ class SettingsManager (UpdateSettingsManager, SetupSettingsManager, PrEvalSettin
         return build_these_packages
 
     def GetPlatformDscAndConfig (self) -> tuple:
-        return ("miroPkg/piano.dsc", {})
+        return ("miroPkg/miro.dsc", {})
 
     def GetName (self):
         return "piano"
@@ -145,7 +145,7 @@ class PlatformBuilder (UefiBuilder, BuildSettingsManager):
         logging.debug ("PlatformBuilder SetPlatformEnv")
 
         self.env.SetValue ("PRODUCT_NAME", "piano", "Platform Hardcoded")
-        self.env.SetValue ("ACTIVE_PLATFORM", "miroPkg/piano.dsc", "Platform Hardcoded")
+        self.env.SetValue ("ACTIVE_PLATFORM", "miroPkg/miro.dsc", "Platform Hardcoded")
         self.env.SetValue ("TARGET_ARCH", "AARCH64", "Platform Hardcoded")
         self.env.SetValue ("TOOL_CHAIN_TAG", "CLANGPDB", "set default to clangpdb")
         self.env.SetValue ("EMPTY_DRIVE", "FALSE", "Default to false")

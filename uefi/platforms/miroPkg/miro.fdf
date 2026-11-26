@@ -48,15 +48,6 @@ READ_STATUS = TRUE
     INF EmbeddedPkg/EmbeddedMonotonicCounter/EmbeddedMonotonicCounter.inf
     INF EmbeddedPkg/RealTimeClockRuntimeDxe/RealTimeClockRuntimeDxe.inf
     INF MdeModulePkg/Universal/DevicePathDxe/DevicePathDxe.inf
-    INF Binaries/piano/Stage0/ShmBridgeDxeLA/ShmBridgeDxeLA.inf
-    INF Binaries/piano/Stage0/ScmDxeCompat/ScmDxeCompat.inf
-    INF Binaries/piano/Stage0/TzDxeLA/TzDxeLA.inf
-    INF Binaries/piano/Stage0/ChipInfo/ChipInfo.inf
-    INF Binaries/piano/Stage0/PlatformInfoDxeDriver/PlatformInfoDxeDriver.inf
-    INF Binaries/piano/Stage0/DALSys/DALSys.inf
-    INF Binaries/piano/Stage0/HWIODxeDriver/HWIODxeDriver.inf
-    INF Binaries/piano/Stage0/HALIOMMU/HALIOMMU.inf
-    INF Binaries/piano/Stage0/SmemDxe/SmemDxe.inf
     INF MdeModulePkg/Universal/PrintDxe/PrintDxe.inf
     INF MdeModulePkg/Universal/HiiDatabaseDxe/HiiDatabaseDxe.inf
     INF MdeModulePkg/Universal/Console/ConPlatformDxe/ConPlatformDxe.inf
@@ -83,15 +74,6 @@ READ_STATUS = TRUE
   INF EmbeddedPkg/EmbeddedMonotonicCounter/EmbeddedMonotonicCounter.inf
   INF EmbeddedPkg/RealTimeClockRuntimeDxe/RealTimeClockRuntimeDxe.inf
   INF MdeModulePkg/Universal/DevicePathDxe/DevicePathDxe.inf
-  INF Binaries/piano/Stage0/ShmBridgeDxeLA/ShmBridgeDxeLA.inf
-  INF Binaries/piano/Stage0/ScmDxeCompat/ScmDxeCompat.inf
-  INF Binaries/piano/Stage0/TzDxeLA/TzDxeLA.inf
-  INF Binaries/piano/Stage0/ChipInfo/ChipInfo.inf
-  INF Binaries/piano/Stage0/PlatformInfoDxeDriver/PlatformInfoDxeDriver.inf
-  INF Binaries/piano/Stage0/DALSys/DALSys.inf
-  INF Binaries/piano/Stage0/HWIODxeDriver/HWIODxeDriver.inf
-  INF Binaries/piano/Stage0/HALIOMMU/HALIOMMU.inf
-  INF Binaries/piano/Stage0/SmemDxe/SmemDxe.inf
   INF MdeModulePkg/Universal/PrintDxe/PrintDxe.inf
   INF MdeModulePkg/Universal/HiiDatabaseDxe/HiiDatabaseDxe.inf
   INF MdeModulePkg/Universal/Console/ConPlatformDxe/ConPlatformDxe.inf
