@@ -54,22 +54,27 @@ if [ -n "$UDC" ]; then
     telnetd -l /bin/sh -p 23 2>/dev/null || true
 fi
 
+# Stop kernel messages from scrolling the status screen away
+dmesg -n 1 2>/dev/null || true
+
+while true; do
 {
-    echo ""
+    printf '\033[2J\033[H'
     echo "=========================================="
     echo " Project-SunUEFI: Redmi K80 Pro (miro)"
     echo "=========================================="
-    uname -a
+    echo "Uptime      : $(cut -d' ' -f1 /proc/uptime)s"
     echo "CPUs online : $(cat /sys/devices/system/cpu/online 2>/dev/null)"
-    echo "Memory      : $(grep MemTotal /proc/meminfo 2>/dev/null)"
-    echo "USB Gadget  : ${UDC:-NONE} (NCM 192.168.77.1:23)"
+    echo "USB Gadget  : ${UDC:-NONE}"
     echo "UFS disks   : $(ls /dev/sd? 2>/dev/null | tr '\n' ' ')"
-    echo "Deferred    :"
-    cat /sys/kernel/debug/devices_deferred 2>/dev/null || true
+    echo "Net ifaces  : $(ls /sys/class/net 2>/dev/null | tr '\n' ' ')"
+    echo "DRM devices : $(ls /dev/dri 2>/dev/null | tr '\n' ' ')"
+    echo "------------- Wi-Fi (last 14) ------------"
+    dmesg | grep -E 'ath12k|pwrseq|wcn|mhi|qmp|aoss' | tail -n 14 | cut -c1-90
     echo "=========================================="
 } >/dev/tty0 2>&1
-
-exec /bin/sh </dev/tty0 >/dev/tty0 2>&1
+sleep 5
+done
 """
 
 
@@ -86,6 +91,7 @@ def build_miro_dtb(src_dtb: Path, out_dtb: Path, work_dir: Path) -> None:
     dts_text = dts_file.read_text()
     tlmm_ph = find_phandle(dts_text, r"pinctrl@f100000\s*\{")
     l2g_ph = find_phandle(dts_text, r'regulator-name\s*=\s*"vreg_l2g_1p8";')
+    aoss_qmp_ph = find_phandle(dts_text, r"power-management@c300000\s*\{")
 
     overlay = f"""
 / {{
@@ -119,6 +125,24 @@ def build_miro_dtb(src_dtb: Path, out_dtb: Path, work_dir: Path) -> None:
 
 	regulator-vsp {{ status = "disabled"; }};
 	regulator-vsn {{ status = "disabled"; }};
+
+	wcn7850-pmu {{
+		compatible = "qcom,wcn7861-pmu";
+		qcom,qmp = <{aoss_qmp_ph}>;
+		qcom,pdc-init-table =
+			"{{class: wlan_pdc, ss: rf, res: s5f.m, enable: 1}}",
+			"{{class: wlan_pdc, ss: rf, res: s5f.v, enable: 1}}",
+			"{{class: wlan_pdc, ss: rf, res: s5f.v, upval: 876}}",
+			"{{class: wlan_pdc, ss: rf, res: s5f.v, dwnval: 876}}";
+		qcom,vreg-pdc-map =
+			"s5f:rf", "s4d:bb", "s3g:rf", "s7i:rf";
+		qcom,pmu-vreg-map =
+			"VDDD_AON_0P9:s5f", "VDDA_RFA_1P9:s3g",
+			"VDDA_RFA_1P3:s7i", "VDDA_RFA_0P9:s5f",
+			"VDDD_WLMX_0P9:s4d", "VDDD_WLCX_0P9:s5f",
+			"VDDD_BTCX_0P9:s5f", "VDDD_BTCMX_0P9:s5f",
+			"VDDA_PCIE_1P2:s7i", "VDDA_PCIE_0P9:s7i";
+	}};
 
 	reserved-memory {{
 		#address-cells = <0x02>;
@@ -167,6 +191,7 @@ def build_miro_dtb(src_dtb: Path, out_dtb: Path, work_dir: Path) -> None:
 				}};
 			}};
 		}};
+		gpu@3d00000 {{ status = "disabled"; }};
 		soundwire@6ab0000 {{ status = "disabled"; }};
 		soundwire@6ad0000 {{ status = "disabled"; }};
 		soundwire@6b10000 {{ status = "disabled"; }};
@@ -182,12 +207,14 @@ def build_miro_dtb(src_dtb: Path, out_dtb: Path, work_dir: Path) -> None:
     subprocess.run(["dtc", "-I", "dts", "-O", "dtb", "-o", str(out_dtb), str(dts_file)], check=True)
 
 
-def build_initramfs(busybox: Path, out_cpio: Path, work_dir: Path) -> None:
+def build_initramfs(busybox: Path, out_cpio: Path, work_dir: Path, fw_dir: Path | None = None) -> None:
     root = work_dir / "initramfs"
     if root.exists():
         shutil.rmtree(root)
-    for d in ("bin", "sbin", "dev", "proc", "sys", "tmp", "mnt", "etc"):
+    for d in ("bin", "sbin", "dev", "proc", "sys", "tmp", "mnt", "etc", "lib/firmware"):
         (root / d).mkdir(parents=True, exist_ok=True)
+    if fw_dir and fw_dir.exists():
+        shutil.copytree(fw_dir, root / "lib" / "firmware", dirs_exist_ok=True)
     shutil.copy2(busybox, root / "bin" / "busybox")
     (root / "bin" / "busybox").chmod(0o755)
     (root / "bin" / "sh").symlink_to("busybox")
@@ -241,6 +268,7 @@ def main() -> int:
     parser.add_argument("--kernel", type=Path, default=Path("/root/miro-linux-test/out/arch/arm64/boot/Image"))
     parser.add_argument("--src-dtb", type=Path, default=Path("/root/miro-linux-test/out/arch/arm64/boot/dts/qcom/sm8750-xiaomi-piano.dtb"))
     parser.add_argument("--busybox", type=Path, default=repo / "build" / "miro-linux" / "busybox")
+    parser.add_argument("--firmware-dir", type=Path, default=repo / "build" / "miro-linux" / "firmware" / "lib" / "firmware")
     parser.add_argument("--out-dir", type=Path, default=repo / "build" / "miro-linux")
     args = parser.parse_args()
 
@@ -250,7 +278,7 @@ def main() -> int:
     out_img = args.out_dir / "MiroLinux-ram-bootv2.img"
 
     build_miro_dtb(args.src_dtb, out_dtb, args.out_dir)
-    build_initramfs(args.busybox, out_cpio, args.out_dir)
+    build_initramfs(args.busybox, out_cpio, args.out_dir, args.firmware_dir)
     pack_boot_v2(args.kernel, out_cpio, out_dtb, out_img)
     return 0
 
