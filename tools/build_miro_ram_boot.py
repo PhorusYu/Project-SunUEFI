@@ -51,6 +51,15 @@ if [ -n "$UDC" ]; then
     done
     ip addr add 192.168.77.1/24 dev usb0 2>/dev/null || ifconfig usb0 192.168.77.1 netmask 255.255.255.0 up
     ip link set usb0 up 2>/dev/null || true
+    mkdir -p /etc /var/lib/misc
+    printf 'start 192.168.77.2
+end 192.168.77.10
+interface usb0
+opt subnet 255.255.255.0
+opt lease 86400
+' >/etc/udhcpd.conf
+    touch /var/lib/misc/udhcpd.leases
+    udhcpd /etc/udhcpd.conf 2>/dev/null || true
     telnetd -l /bin/sh -p 23 2>/dev/null || true
 fi
 
@@ -65,12 +74,14 @@ while true; do
     echo "=========================================="
     echo "Uptime      : $(cut -d' ' -f1 /proc/uptime)s"
     echo "CPUs online : $(cat /sys/devices/system/cpu/online 2>/dev/null)"
-    echo "USB Gadget  : ${UDC:-NONE}"
+    echo "USB Gadget  : ${UDC:-NONE} state=$(cat /sys/class/udc/*/state 2>/dev/null) speed=$(cat /sys/class/udc/*/current_speed 2>/dev/null)"
     echo "UFS disks   : $(ls /dev/sd? 2>/dev/null | tr '\n' ' ')"
     echo "Net ifaces  : $(ls /sys/class/net 2>/dev/null | tr '\n' ' ')"
     echo "DRM devices : $(ls /dev/dri 2>/dev/null | tr '\n' ' ')"
-    echo "------------- Wi-Fi (last 14) ------------"
-    dmesg | grep -E 'ath12k|pwrseq|wcn|mhi|qmp|aoss' | tail -n 14 | cut -c1-90
+    echo "------------- USB (last 8) ---------------"
+    dmesg | grep -i -E 'dwc3|eusb2|repeater|a600000|88e3000|gadget|udc' | tail -n 8 | cut -c1-90
+    echo "------------- Wi-Fi (last 6) -------------"
+    dmesg | grep -E 'ath12k|pwrseq|wcn|mhi|qmp|aoss' | tail -n 6 | cut -c1-90
     echo "=========================================="
 } >/dev/tty0 2>&1
 sleep 5
@@ -171,9 +182,6 @@ def build_miro_dtb(src_dtb: Path, out_dtb: Path, work_dir: Path) -> None:
 			qcom,select-utmi-as-pipe-clk;
 			status = "okay";
 		}};
-		phy@88e3000 {{
-			/delete-property/ phys;
-		}};
 
 		ufs@1d84000 {{
 			/delete-property/ qcom,ice;
@@ -191,7 +199,12 @@ def build_miro_dtb(src_dtb: Path, out_dtb: Path, work_dir: Path) -> None:
 				}};
 			}};
 		}};
-		gpu@3d00000 {{ status = "disabled"; }};
+		gpu@3d00000 {{
+			status = "okay";
+			zap-shader {{
+				firmware-name = "qcom/gen80000_zap.mbn";
+			}};
+		}};
 		soundwire@6ab0000 {{ status = "disabled"; }};
 		soundwire@6ad0000 {{ status = "disabled"; }};
 		soundwire@6b10000 {{ status = "disabled"; }};
