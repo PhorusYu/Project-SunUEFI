@@ -117,7 +117,7 @@ def build(args):
     if not re.fullmatch(r'[0-9A-Za-z.+_-]+', version):
         raise ValueError('Module version is not a safe artifact filename')
     work, artifacts = args.work.resolve(), args.output.resolve()
-    output = artifacts / ('SunUEFI-Piano-' + version + '.zip')
+    output = artifacts / ('SunUEFI-Miro-' + version + '.zip')
     work.mkdir(parents=True, exist_ok=True)
     (work / '.incomplete').write_text('Android module build has not completed.\n')
     artifacts.mkdir(parents=True, exist_ok=True)

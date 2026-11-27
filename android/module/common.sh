@@ -157,10 +157,7 @@ piano_boot_source_warning() {
   fi
 }
 piano_current_identity() {
-  case "$(getprop ro.product.device)" in
-    piano|miro) ;;
-    *) piano_fail "Only piano or miro is supported."; return 1 ;;
-  esac
+  [ "$(getprop ro.product.device)" = miro ] || piano_fail "Only miro is supported." || return
   slot=$(getprop ro.boot.slot_suffix)
   case "$slot" in _a|_b) ;; *) piano_fail "Cannot identify the current Android slot."; return 1 ;; esac
   bootdev="/dev/block/by-name/boot$slot"

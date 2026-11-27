@@ -529,7 +529,7 @@ static void property(const char *name, char *value, size_t capacity) {
 }
 static struct identity current_identity(const struct options *o, int write) {
   struct identity id = {0}; char value[64];
-  property("ro.product.device", value, sizeof(value)); require(!strcmp(value, "piano") || !strcmp(value, "miro"), "only the current Piano/Miro Android is supported");
+  property("ro.product.device", value, sizeof(value)); require(!strcmp(value, "miro"), "only the current Miro Android is supported");
   property("ro.boot.slot_suffix", id.slot, sizeof(id.slot));
   require(!strcmp(id.slot, "_a") || !strcmp(id.slot, "_b"), "unknown active Android slot");
   snprintf(id.node, sizeof(id.node), "/dev/block/by-name/boot%s", id.slot);

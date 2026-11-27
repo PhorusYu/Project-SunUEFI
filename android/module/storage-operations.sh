@@ -13,10 +13,7 @@ RECEIPT="$STATE/android-expansion.json"
 mkdir -p "$STATE"
 chmod 700 "$STATE"
 [ "$(id -u)" = 0 ] || { echo '需要 Root 权限。' >&2; exit 1; }
-case "$(getprop ro.product.device)" in
-  piano|miro) ;;
-  *) echo '此工具只支持 piano / miro。' >&2; exit 1 ;;
-esac
+[ "$(getprop ro.product.device)" = miro ] || { echo '此工具只支持 Redmi K80 Pro (miro)。' >&2; exit 1; }
 [ -x "$NATIVE" ] || { echo '存储组件未安装，请更新模块。' >&2; exit 1; }
 
 valid_id() {

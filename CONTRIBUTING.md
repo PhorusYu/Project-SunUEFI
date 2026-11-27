@@ -1,10 +1,10 @@
 # 贡献指南
 
-Project SunUEFI 为小米平板 8 Pro（`piano`）提供统一 UEFI 和 Linux 适配，长期目标包括 Windows on ARM。欢迎提交问题、测试结果和代码。
+SunUEFI-miro 为 Redmi K80 Pro（`miro`）提供统一 UEFI 和 Linux 适配。欢迎提交问题、测试结果和代码。
 
 ## 反馈问题
 
-在 GitHub Issues 里写清楚：使用的构建（提交号或镜像哈希）、做了什么、看到什么。如果 UEFI Fastboot 可用，附上 `fastboot -s SunUEFI-piano oem ramlog` 和 `get_staged` 导出的日志；Linux 里附上 `dmesg` 和相关服务的 `journalctl`。同时说明你的面板和内存容量；当前运行使用 CSOT 配置。
+在 GitHub Issues 里写清楚：使用的构建（提交号或镜像哈希）、做了什么、看到什么。如果 UEFI Fastboot 可用，附上 `oem ramlog` 和 `get_staged` 导出的日志；Linux 里附上 `dmesg` 和相关服务的 `journalctl`。同时说明你的屏幕面板与内存容量。
 
 ## 提交代码
 
@@ -20,4 +20,4 @@ Project SunUEFI 为小米平板 8 Pro（`piano`）提供统一 UEFI 和 Linux �
 * **一套核心**：新功能和修复都进同一套 UEFI 和同一个产品镜像，不另做独立的测试镜像。
 * **保护原厂数据**：扫描和启动不得写入原厂分区。用户明确刷写时，只操作校验通过的目标和范围；把控制权交给系统前须安全关闭已占用的设备。
 * **标准接口优先**：硬件支持尽量放在内核驱动和设备树里，让干净的发行版也能用；桌面联动用 BlueZ、ALSA/UCM、IIO、DRM/KMS、UPower 等标准接口。
-* **写清楚做到哪**：区分“代码已编译”“驱动已加载”和“在平板上确实可用”，没做完的明确写出来。
+* **写清楚做到哪**：区分“代码已编译”“驱动已加载”和“在手机上确实可用”，没做完的明确写出来。
