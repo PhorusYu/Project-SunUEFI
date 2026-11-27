@@ -291,9 +291,7 @@ def build_miro_dtb(src_dtb: Path, out_dtb: Path, work_dir: Path) -> None:
 			}};
 		}};
 		soundwire@6ab0000 {{ status = "disabled"; }};
-		soundwire@6ad0000 {{ status = "disabled"; }};
 		soundwire@6b10000 {{ status = "disabled"; }};
-		soundwire@7630000 {{ status = "disabled"; }};
 		spmi@c400000 {{
 			pmic@0 {{
 				pon@1300 {{
@@ -309,8 +307,12 @@ def build_miro_dtb(src_dtb: Path, out_dtb: Path, work_dir: Path) -> None:
 		}};
 		isp@ac04000 {{ status = "disabled"; }};
 		video-codec@aa00000 {{ status = "disabled"; }};
-		pinctrl@7760000 {{ status = "disabled"; }};
 		mmc@8804000 {{ status = "disabled"; }};
+	}};
+	sound {{
+		model = "Xiaomi Redmi K80 Pro";
+		audio-routing = "IN1_HPHL", "HPHL_OUT", "IN2_HPHR", "HPHR_OUT", "AMIC2", "MIC BIAS2", "VA DMIC0", "MIC BIAS3", "VA DMIC1", "MIC BIAS3", "VA DMIC2", "MIC BIAS1", "VA DMIC3", "MIC BIAS1", "VA DMIC0", "VA MIC BIAS3", "VA DMIC1", "VA MIC BIAS3", "VA DMIC2", "VA MIC BIAS1", "VA DMIC3", "VA MIC BIAS1", "TX SWR_INPUT1", "ADC2_OUTPUT";
+		/delete-node/ wsa-dai-link;
 	}};
 }};
 """
