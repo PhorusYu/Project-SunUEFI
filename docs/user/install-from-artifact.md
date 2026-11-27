@@ -1,5 +1,7 @@
 # 安装指南
 
+本页保留自 Project-SunUEFI，描述 Piano 的实现或开发工具，不表示 miro 已支持这些功能。未收录的历史文件已在正文标明；miro 的支持范围见[项目状态](../status.md)。
+
 在平板上用 SunUEFI 引导助手安装 Linux：创建独立分区，写入启动镜像和系统镜像，再选择从 Linux 启动。不需要电脑，也不用填写序列号。第一次安装的简要路线见[快速上手](getting-started.md)。
 
 ## 准备
@@ -55,7 +57,7 @@
 日常更新用系统自带的包管理器。带 SunUEFI 签名软件源的镜像会一同更新项目提供的内核、设备树和其他已打包的设备组件，不需要重新刷系统镜像。
 
 * Debian：运行 `sudo apt update && sudo apt upgrade`。
-* Nyarch 和 SteamOS：运行 `sudo pacman -Syu`。SteamOS 也可以在 [Steam 或 Discover 中更新](steamos.md#系统更新)。
+* Nyarch 和 SteamOS：运行 `sudo pacman -Syu`。SteamOS 也可以在 Steam 或 Discover 中更新（原文件未收录）。
 
 新版 Arch 镜像自带 `piano-sensors`，随系统更新。早期镜像中的传感器服务已经能
 运行，不必重装。如果手动安装 `piano-sensors` 时 pacman 报告文件已存在，用

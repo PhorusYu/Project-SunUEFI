@@ -1,5 +1,7 @@
 # 运行检查
 
+本页保留自 Project-SunUEFI，描述 Piano 的实现或开发工具，不表示 miro 已支持这些功能。未收录的历史文件已在正文标明；miro 的支持范围见[项目状态](../status.md)。
+
 本地通过 `./build.sh check` 运行主机端检查，不需要连接平板。涉及写入和硬件交互的改动，还需要在实际平板上验证。
 
 ## 主机检查
@@ -47,7 +49,7 @@
 
 | 链路 | 检查与操作 | 必须满足的结果 |
 | --- | --- | --- |
-| 触控笔 | `libinput list-devices`、`libinput debug-events`；两种笔绘画、悬停、倾角、按钮、手掌、磁吸、120／144 Hz、挂起恢复及固件重载 | 一个物理 tablet-tool，坐标与笔尖一致，抬笔／断连无残留压力；没有 THP／hidraw 用户态解码或 uinput。当前 BlueZ 初始化、弱悬停及 144 Hz 的缺项见[笔实现](hardware/pen-protocol.md#内核输入与许可边界) |
+| 触控笔 | `libinput list-devices`、`libinput debug-events`；两种笔绘画、悬停、倾角、按钮、手掌、磁吸、120／144 Hz、挂起恢复及固件重载 | 一个物理 tablet-tool，坐标与笔尖一致，抬笔／断连无残留压力；没有 THP／hidraw 用户态解码或 uinput。当前 BlueZ 初始化、弱悬停及 144 Hz 的缺项见笔实现（原文件未收录） |
 | 指纹 | 先核对传感器控制模型、固件许可和录入授权，再通过发行版 fprintd 检查录入、多指、验证、枚举、删除、取消及超时 | 使用已接受的设备控制模型和标准 TEE 接口，不依赖 UIO；不得在禁止 RPMB 写入时运行可能获取 HAT 的录入／验证。当前边界见[指纹实现](hardware/led-ir-fingerprint.md#侧指纹) |
 | 相机 | `cam -l`、`v4l2-compliance`；前后摄逐模式拍照、持续录像，测量尺寸、帧间隔、掉帧和音画同步；检查自动／手动曝光、ISO、白平衡、后摄对焦、闪光和恢复 | libcamera 直接配置 TFE，IPA 使用硬件统计；记录实际曝光和增益的生效帧，ISO 与标定数据一致，不把模式枚举当成完整录像结果。标准路径不依赖 loopback、控制 socket 或软件 ISP。缺项见[相机接口](hardware/camera-controls.md#内核接口与-libcamera) |
 

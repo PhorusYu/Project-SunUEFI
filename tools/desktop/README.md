@@ -1,5 +1,7 @@
 # Local desktop control
 
+本页保留自 Project-SunUEFI，描述 Piano 的实现或开发工具，不表示 miro 已支持这些功能。未收录的历史文件已在正文标明；miro 的支持范围见[项目状态](../../docs/status.md)。
+
 Run `piano_desktop_control.py` inside the guest as the active GNOME session user,
 with that session's `DBUS_SESSION_BUS_ADDRESS` and `XDG_RUNTIME_DIR`. It is a
 one-shot client, not a service to enable. It uses the actual Mutter RD1/SC4 API,
@@ -59,7 +61,7 @@ default kernel. No state is invented when the pen does not respond. Logs use
 `CLOCK_BOOTTIME`, matching THP frame timestamps. The tool releases its BlueZ
 notification subscription on exit and does not own the touch FIFO or generate
 input events. A successful response confirms control communication, not drawing
-support. See [pen protocol](../../docs/devel/hardware/pen-protocol.md).
+support. See pen protocol（原文件未收录）.
 
 `--send-dock-state` additionally reads the real `SW_PEN_INSERTED` switch from
 the SC96231 pen-dock switch and sends OEM `51 01` with detached=1/attached=0.

@@ -1,5 +1,7 @@
 # Linux 服务源码地图
 
+本页保留自 Project-SunUEFI，描述 Piano 的实现或开发工具，不表示 miro 已支持这些功能。未收录的历史文件已在正文标明；miro 的支持范围见[项目状态](../../status.md)。
+
 平板上运行的硬件服务来自本仓库与固定版本的上游 `debian-piano`。修改服务时，要同时看 unit 的 `ExecStart` 和对应脚本的构建来源；设备上的 `/usr/lib/piano/` 是安装结果。
 
 | 要修改的内容 | 源码位置 | 安装位置或构建入口 |
@@ -11,8 +13,8 @@
 | DMA 状态诊断 | [`linux/userspace/piano-ram-hardware-prepare`](../../../linux/userspace/piano-ram-hardware-prepare) | 仅用于显式诊断，不阻止模块自动探测 |
 | 手指帧解码与多点输入 | [`0399-LOCAL-input-nt36532e-matrix.patch`](../../../patches/linux/7.3/0399-LOCAL-input-nt36532e-matrix.patch) | 编入 `nt36532e_ts`，在现有 SPI 中断线程中直接上报标准输入事件 |
 | 内核笔解码与 BLE 融合 | [`0432-LOCAL-input-nt36532e-pen.patch`](../../../patches/linux/7.3/0432-LOCAL-input-nt36532e-pen.patch) | 编入 `nt36532e_ts`；从标准固件目录加载数字校准，由物理 SPI tablet-tool 上报输入 |
-| 原始帧诊断 | [`upstream/debian-piano-current/initramfs/touch-view/piano-touch-view.c`](../../../upstream/debian-piano-current/initramfs/touch-view/piano-touch-view.c) | 派生后编译为 `/usr/bin/piano-touch-view`；由开发者手动运行 |
-| 触屏程序的本地观测补丁 | [`tools/patches/piano-touch-view-observability.patch`](../../../tools/patches/piano-touch-view-observability.patch) | `build_piano_runtime_helpers.py` 派生源码，`build_release_helpers.py` 编译 |
+| 原始帧诊断 | `upstream/debian-piano-current/initramfs/touch-view/piano-touch-view.c`（原文件未收录） | 派生后编译为 `/usr/bin/piano-touch-view`；由开发者手动运行 |
+| 触屏程序的本地观测补丁 | `tools/patches/piano-touch-view-observability.patch`（原文件未收录） | `build_piano_runtime_helpers.py` 派生源码，`build_release_helpers.py` 编译 |
 | 相机服务、图像处理与控制接口 | [`linux/bsp/optional/camera/`](../../../linux/bsp/optional/camera/) 与 [`linux/userspace/camera/`](../../../linux/userspace/camera/) | 共用 Makefile 编译服务与客户端，两条运行库构建入口使用同一份源码 |
 | 音频 UCM、模块加载参数、udev 配置 | [`linux/bsp/common/`](../../../linux/bsp/common/) | 按目录布局安装；文件清单在 `linux/bsp/manifest.json` |
 | Linux 调试入口与引导脚本 | [`linux/userspace/`](../../../linux/userspace/) | 包含 `piano-debug-bootstrap`、debug/serial unit、磁盘与 RAM 引导脚本 |
@@ -51,7 +53,7 @@ Debian sid 使用发行版 UPower，不再重建旧版 daemon。签名源码中�
 
 相机服务在用户会话开始前创建 V4L2 loopback 节点，并发送 systemd 就绪通知；只有应用请求视频时才启动采集。相机驱动由硬件别名自动探测，`CAMERA_START=0` 禁用图像服务。升级时一起更新 unit 和 helper。
 
-2026-10-08 的 `g086a94c4529d` 实机已绑定主线接口驱动 `qcom-camss`、后置 `s5kjn1 7-0010`、前置 `ov32d40 5-0010` 和对焦 `dw9768 7-000c`。原厂最终 DT 与现有 [相机 overlay](../../../upstream/debian-piano-current/boot/dtbo-piano-camera.dts) 对应：后置走 CCI0 master1、GPIO115/116、CSIPHY1；前置走 QUP2 SE1 I²C、GPIO4/5、CSIPHY4。内核的 `drivers/media/platform/qcom/camss/` 已包含 SM8750、CSID980 和 TFE Gen4 支持，两个 sensor 位于 `drivers/media/i2c/{s5kjn1,ov32d40}.c`。这不是重新移植缺失驱动的场景；`video40/41` 是 loopback，不能单凭枚举判定有图像。此版本经普通 BOOT 启动后，两路各做了30帧短采集，硬件各输出28帧；前后预览已检查，未再出现 CCM `Bad address`。后置等待90帧后画面比初始预览更清晰。长期帧率、同时采集和 GNOME 应用体验仍未验证。
+2026-10-08 的 `g086a94c4529d` 实机已绑定主线接口驱动 `qcom-camss`、后置 `s5kjn1 7-0010`、前置 `ov32d40 5-0010` 和对焦 `dw9768 7-000c`。原厂最终 DT 与现有 相机 overlay（原文件未收录） 对应：后置走 CCI0 master1、GPIO115/116、CSIPHY1；前置走 QUP2 SE1 I²C、GPIO4/5、CSIPHY4。内核的 `drivers/media/platform/qcom/camss/` 已包含 SM8750、CSID980 和 TFE Gen4 支持，两个 sensor 位于 `drivers/media/i2c/{s5kjn1,ov32d40}.c`。这不是重新移植缺失驱动的场景；`video40/41` 是 loopback，不能单凭枚举判定有图像。此版本经普通 BOOT 启动后，两路各做了30帧短采集，硬件各输出28帧；前后预览已检查，未再出现 CCM `Bad address`。后置等待90帧后画面比初始预览更清晰。长期帧率、同时采集和 GNOME 应用体验仍未验证。
 
 相机硬件当前只交给 `piano-camerad` 管理；它配置 CSID→TFE PIX、缩放和 NV12，并提供曝光、白平衡、对焦控制。[WirePlumber 配置](../../../linux/bsp/optional/camera/etc/wireplumber/wireplumber.conf.d/50-piano-camera.conf) 因此禁用 `monitor.libcamera` 和直连 CAMSS 节点，应用使用 loopback。这份配置与服务一起保留，不能在没有可运行替代时单独删除。libcamera 上游支持范围、TFE 统计与逐帧参数接口、前摄时序、并发、时间戳和调校许可的缺项统一见[内核接口与 libcamera](../hardware/camera-controls.md#内核接口与-libcamera)。Debian、SteamOS 和 Nyarch 共用同一内核适配；切换发行版或升级软件包不能补齐这些硬件接口。
 

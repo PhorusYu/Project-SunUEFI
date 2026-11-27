@@ -1,5 +1,7 @@
 # Piano 摄像头闪光灯
 
+本页保留自 Project-SunUEFI，描述 Piano 的实现或开发工具，不表示 miro 已支持这些功能。未收录的历史文件已在正文标明；miro 的支持范围见[项目状态](../../status.md)。
+
 手电筒经标准 LED 接口控制，后摄也能通过标准 V4L2 flash 控件触发两个灯组。
 两组分别对应控制器的 1＋4 和 2＋3 通道。普通相机应用还不能自动使用闪光灯：
 硬件能发出短闪光，但 libcamera 尚未将它与曝光同步。
@@ -26,7 +28,7 @@ S5KJN1 的 `flash-leds` 引用两个配对节点，由
 `v4l2_async_register_subdev_sensor()` 建立关联，不增加用户空间设备或守护进程。
 绑定见 [qcom,spmi-flash-led.yaml](https://github.com/torvalds/linux/blob/master/Documentation/devicetree/bindings/leds/qcom,spmi-flash-led.yaml)。
 
-[内核配置](../../../linux/configs/piano-flash.config) 启用 `LEDS_CLASS_FLASH`、
+内核配置（原文件未收录） 启用 `LEDS_CLASS_FLASH`、
 `LEDS_QCOM_FLASH`、`V4L2_FLASH_LED_CLASS` 和 `VIDEO_V4L2_SUBDEV_API`。
 驱动提供 torch brightness、flash brightness、timeout、strobe 和 fault。
 V4L2 wrapper 提供对应的标准控件；节点编号随探测顺序变化，应通过 media graph

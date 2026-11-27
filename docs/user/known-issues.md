@@ -1,5 +1,7 @@
 # 已知问题
 
+本页保留自 Project-SunUEFI，描述 Piano 的实现或开发工具，不表示 miro 已支持这些功能。未收录的历史文件已在正文标明；miro 的支持范围见[项目状态](../status.md)。
+
 按使用中遇到的现象排列，每项写明影响和绕过办法。功能范围见[项目状态](../status.md)。
 
 ## 首次分区
@@ -61,4 +63,4 @@ Focus Pen Pro 在 120 Hz 下支持定位和压感书写。笔由内核直接上�
 * Recovery 里的独立 SunUEFI 镜像已放弃，见[故障恢复](recovery.md#原厂-recovery)。
 * 桌面和硬件功能主要在 CSOT 面板的 `25091RP04C` 上验证。
 * `debian-kde` 由 CI 构建，实机上的桌面和硬件功能没有像 GNOME 那样逐项验证。
-* SteamOS 是实验版，游戏兼容性因游戏而异，见 [SteamOS](steamos.md)。
+* SteamOS 是实验版，游戏兼容性因游戏而异，见 SteamOS（原文件未收录）。

@@ -251,7 +251,7 @@ Piano 的原生硬件包，源码和扩展选择在 `config/nyarch.json`。
 
 构建 Nyarch 和 Arch Denial 时，从 `config/nyarch.json` 指定的同一个 Arch Linux ARM
 镜像取索引和软件包，避免从一个镜像拿索引，再去另一个镜像找对应的包。
-安装后的官方镜像列表不变。SteamOS 的构建细节见 [SteamOS ARM64](linux/steamos.md)。
+安装后的官方镜像列表不变。SteamOS 的构建细节见 SteamOS ARM64（原文件未收录）。
 
 两种 Denial 产品镜像从 SunUEFI 签名源安装接入 SensorProxy 的合成器。
 Debian 从 [Denial 签名源](https://github.com/denialwm/denial/blob/main/docs/INSTALL.md#repository-trust-paths)

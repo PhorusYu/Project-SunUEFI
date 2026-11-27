@@ -1,13 +1,15 @@
 # Piano 手写笔核心
 
+本页保留自 Project-SunUEFI，描述 Piano 的实现或开发工具，不表示 miro 已支持这些功能。未收录的历史文件已在正文标明；miro 的支持范围见[项目状态](../../../docs/status.md)。
+
 这里包含笔的 BlueZ 初始化、离线解码工具和手动诊断代码。产品的笔和手指由内核直接上报。
 
 校准经设备配置包安装到标准固件目录。`pen-control.py` 只执行 BlueZ
 FE11/FE12 初始化；发布构建必须有匹配的内核笔驱动和校准。输入链、校准、
 两笔限制和许可依据见
-[内核输入与许可边界](../../../docs/devel/hardware/pen-protocol.md#内核输入与许可边界)。
+内核输入与许可边界（原文件未收录）。
 
-Focus Pen Pro 已在新整数内核解码器上完成 120 Hz 压感绘画，物理 evdev 的压力范围为 0..16383，双轴倾角有变化。弱悬停、倾角精度、完整四边和掌压仍需实机对照。普通笔与刷新率的范围见[内核输入说明](../../../docs/devel/hardware/pen-protocol.md#内核输入与许可边界)。轻捏、双击笔身和笔身滑动见[笔身手势](#笔身手势)。
+Focus Pen Pro 已在新整数内核解码器上完成 120 Hz 压感绘画，物理 evdev 的压力范围为 0..16383，双轴倾角有变化。弱悬停、倾角精度、完整四边和掌压仍需实机对照。普通笔与刷新率的范围见内核输入说明（原文件未收录）。轻捏、双击笔身和笔身滑动见[笔身手势](#笔身手势)。
 
 ## 普通 Focus Pen
 
@@ -73,7 +75,7 @@ KDE 按 `/devices/virtual/` 路径识别 uinput，所以数位板页面会显示
 使用桌面设置，不在解算进程另设一套曲线。设备上的压力曲线修改已写入标准
 `kcminputrc` 并可恢复；不改总线类型或伪造硬件路径来隐藏该提醒。
 
-掌压识别在手指解码中完成，新内核的实现见[服务源码地图](../../../docs/devel/linux/services.md)，旧内核与离线诊断使用 [`piano-touch-view-palm-rejection.patch`](../../../tools/patches/piano-touch-view-palm-rejection.patch)。每个触点取峰值周围连通且不低于触摸阈值（默认 200）的格子，达到 70 格时上报为 `MT_TOOL_PALM`，同一片手掌只占一个触点，抬起前不会变回手指，也不按下 `BTN_TOUCH`；libinput 不把它交给应用，手指变成手掌时取消已开始的触摸。70 取自原厂触控配置 `/odm/firmware/piano_nova_boe_thp_config.ini`（CSOT 版本取值相同）的 `palm_area_num_level2`。原厂按同样的 60×40 感应矩阵计数，每格约 16 mm²，70 格约 1140 mm²，相当于直径 38 mm 的圆。原厂同组还有 `palm_neg_area_num_level2=30`（负值格子数）和更大的 `palm_area_num_level1=110`；这里不统计负值格子，只用 70 格；面积统计沿用手指的 200 阈值，没有复现原厂的面积判定。弱信号把手掌分成多个小块时，会漏判为多指。按格子数判断，两指并拢时连成的细长区域仍是两根手指。触点大小按椭圆估算长短轴，以 `ABS_MT_TOUCH_MAJOR`／`ABS_MT_TOUCH_MINOR` 上报，单位是 13／mm（面板 239×163 mm）。校验通过的 type29 笔帧到来时，仍按着的触点以手掌方式抬起，先落下的手不会在笔靠近时变成一次点击。BSP 的 `79-piano-pen-touch-group.rules` 把触屏和笔放进同一个 libinput 设备组，笔在感应范围内时，libinput 自带的触控仲裁忽略笔旁的新触摸。在平板上调整时，用 `evtest` 查看手指和手掌的 `ABS_MT_TOUCH_MAJOR`、`ABS_MT_TOUCH_MINOR` 与 `ABS_MT_TOOL_TYPE`，长短轴相乘再除以 3500 约等于格子数，据此调整掌压面积阈值。
+掌压识别在手指解码中完成，新内核的实现见[服务源码地图](../../../docs/devel/linux/services.md)，旧内核与离线诊断使用 `piano-touch-view-palm-rejection.patch`（原文件未收录）。每个触点取峰值周围连通且不低于触摸阈值（默认 200）的格子，达到 70 格时上报为 `MT_TOOL_PALM`，同一片手掌只占一个触点，抬起前不会变回手指，也不按下 `BTN_TOUCH`；libinput 不把它交给应用，手指变成手掌时取消已开始的触摸。70 取自原厂触控配置 `/odm/firmware/piano_nova_boe_thp_config.ini`（CSOT 版本取值相同）的 `palm_area_num_level2`。原厂按同样的 60×40 感应矩阵计数，每格约 16 mm²，70 格约 1140 mm²，相当于直径 38 mm 的圆。原厂同组还有 `palm_neg_area_num_level2=30`（负值格子数）和更大的 `palm_area_num_level1=110`；这里不统计负值格子，只用 70 格；面积统计沿用手指的 200 阈值，没有复现原厂的面积判定。弱信号把手掌分成多个小块时，会漏判为多指。按格子数判断，两指并拢时连成的细长区域仍是两根手指。触点大小按椭圆估算长短轴，以 `ABS_MT_TOUCH_MAJOR`／`ABS_MT_TOUCH_MINOR` 上报，单位是 13／mm（面板 239×163 mm）。校验通过的 type29 笔帧到来时，仍按着的触点以手掌方式抬起，先落下的手不会在笔靠近时变成一次点击。BSP 的 `79-piano-pen-touch-group.rules` 把触屏和笔放进同一个 libinput 设备组，笔在感应范围内时，libinput 自带的触控仲裁忽略笔旁的新触摸。在平板上调整时，用 `evtest` 查看手指和手掌的 `ABS_MT_TOUCH_MAJOR`、`ABS_MT_TOUCH_MINOR` 与 `ABS_MT_TOOL_TYPE`，长短轴相乘再除以 3500 约等于格子数，据此调整掌压面积阈值。
 
 ## 原厂协议进展
 
@@ -123,7 +125,7 @@ P81C 的 137 字节 HID Report Map 将私有 Report5 数据放在键盘 Usage Pa
 
 ## 笔身手势
 
-轻捏、双击笔身和笔身上下滑动由笔自己识别，都经 Report2 发出：两个字节 `02 value`，新值替换旧值，每个手势以 `02 00` 结束。笔固件只发送下表中的值，固件与原厂系统中的依据见[笔身手势协议](../../../docs/devel/hardware/pen-protocol.md#笔身手势)。
+轻捏、双击笔身和笔身上下滑动由笔自己识别，都经 Report2 发出：两个字节 `02 value`，新值替换旧值，每个手势以 `02 00` 结束。笔固件只发送下表中的值，固件与原厂系统中的依据见笔身手势协议（原文件未收录）。
 
 | Report2 | 手势 | Linux 输出 | 原厂行为 |
 | --- | --- | --- | --- |
@@ -140,7 +142,7 @@ P81C 的 137 字节 HID Report Map 将私有 Report5 数据放在键盘 Usage Pa
 `BTN_STYLUS2` 当作右键；绘图应用可将其绑定到橡皮擦或取色工具。
 双击或滑动打断轻捏时，轻捏结束但不算一次点击。
 
-笔尖受压时笔不发送手势，停笔片刻后才会识别。双击和滑动的开关保存在笔里，`pen-control.py` 在每次连接时应用配置中的 `double_tap` 与 `slide`；改法见[笔协议说明](../../../docs/devel/hardware/pen-protocol.md)。原厂在双击和滑动时会让平板另发一次振动命令，Linux 不发送，因此这两个手势没有笔端振动。
+笔尖受压时笔不发送手势，停笔片刻后才会识别。双击和滑动的开关保存在笔里，`pen-control.py` 在每次连接时应用配置中的 `double_tap` 与 `slide`；改法见笔协议说明（原文件未收录）。原厂在双击和滑动时会让平板另发一次振动命令，Linux 不发送，因此这两个手势没有笔端振动。
 
 双击与滑动的报告格式来自笔固件和原厂系统，尚无平板上的实测记录。在平板上检查时，`sudo libinput debug-events --show-keycodes` 应在笔的键盘设备上显示 `KEY_PAGEUP`／`KEY_PAGEDOWN`，在 `Piano Focus Pen Pro` 上显示 `BTN_STYLUS2`；`sudo evtest` 可分别查看两个设备。只看原始 Report2 的命令见协议页。
 
@@ -162,4 +164,4 @@ P81C 的 137 字节 HID Report Map 将私有 Report5 数据放在键盘 Usage Pa
 
 `prepare_alg_gnu.py` 与 `piano-pen-worker.c` 仍用于对照调用者提供的固定原厂 ALG，代码与原库指令不混在一起。其配置／初始化已经隔离执行成功。`--decode29` 重建 HAL 帧前缀；`--prepare29` 另需1032字节 common7／`0x440`，调用压力与矩阵准备接口。它不输出坐标，也不能把缺失 SC 状态的前缀直接交给完整 `parse_data_package` 或 slot7。
 
-主实现路线是上述独立开源核心，不需要分发原厂 ALG/HAL。完整字段、来源与剩余硬件问题见 [手写笔协议开发记录](../../../docs/devel/hardware/pen-protocol.md)。
+主实现路线是上述独立开源核心，不需要分发原厂 ALG/HAL。完整字段、来源与剩余硬件问题见 手写笔协议开发记录（原文件未收录）。

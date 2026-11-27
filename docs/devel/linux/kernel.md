@@ -1,5 +1,7 @@
 # 内核来源与配置
 
+本页保留自 Project-SunUEFI，描述 Piano 的实现或开发工具，不表示 miro 已支持这些功能。未收录的历史文件已在正文标明；miro 的支持范围见[项目状态](../../status.md)。
+
 Debian GNOME、Debian KDE、Nyarch GNOME 和 SteamOS 共用同一套设备内核。
 默认构建使用稳定版 Linux 7.3.3，版本名为 `7.3.3-piano-sunuefi-cachy-optimize`。
 桌面名称属于 root 镜像，内核名称不带 `gnome` 或构建目录的 Git 后缀。
@@ -82,7 +84,7 @@ Alpha 通道的纵向像素扩展也使用对应的纵向寄存器配置。
 * 不另设 CPU 频率上限，不引入 x86 专用优化或已经不适用于当前 BORE 的
   sysctl 参数。300 Hz 也不等于屏幕刷新率或输入采样率。
 
-具体配置位于 [`piano-platform.config`](../../../linux/configs/piano-platform.config)，
+具体配置位于 `piano-platform.config`（原文件未收录），
 来源及许可见 [THIRD_PARTY.md](../../../THIRD_PARTY.md)。
 
 内核与外部相机模块使用固定的 LLVM 23.1.5，下载地址和摘要见
@@ -99,7 +101,7 @@ SVE／SME，也不通过编译选项调整频率或温控。
 `Filesystem type exfat not configured in kernel`。分区枚举本身是好的，
 `lsblk` 能看到设备，只有挂载失败。
 
-[`piano-filesystem.config`](../../../linux/configs/piano-filesystem.config)
+`piano-filesystem.config`（原文件未收录）
 补齐 `EXFAT_FS`、`NTFS3_FS` 和两者挂载时都要读取的 `NLS_UTF8`。这些编进
 内核而不做成模块，理由与 `CONFIG_USB_HID` 相同：介质插入后应当直接可用，
 不应依赖之后手工加载模块。`NLS_UTF8` 是最容易漏的一项——缺它时文件系统
@@ -172,7 +174,7 @@ Linux 保留 SoC 原有的 hot／critical 阈值，没有复制厂商停核策�
 
 ### 游戏手柄
 
-[`piano-gamepad.config`](../../../linux/configs/piano-gamepad.config) 为四个
+`piano-gamepad.config`（原文件未收录） 为四个
 系统启用主线 `xpad`、`hid-microsoft`、`hid-nintendo`、`hid-playstation`
 和 `hid-sony`，同时开启 joystick 设备接口、振动及驱动支持的指示灯功能。
 USB Xbox／XInput 设备使用 `xpad`；蓝牙 HID 通过 BlueZ、UHID／HIDP 和

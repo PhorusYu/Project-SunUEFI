@@ -1,5 +1,7 @@
 # 快速上手
 
+本页保留自 Project-SunUEFI，描述 Piano 的实现或开发工具，不表示 miro 已支持这些功能。未收录的历史文件已在正文标明；miro 的支持范围见[项目状态](../status.md)。
+
 在小米平板 8 Pro 上第一次安装 Linux，按本页五步走完即可，Android 和里面的数据保持原样。
 
 ## 开始前
@@ -19,7 +21,7 @@
 | `debian-denial` | Debian sid + Denial | 8 GiB | 想用 APT 和 Denial 触控桌面 |
 | `nyarch-gnome` | Arch Linux ARM + GNOME（Nyarch） | 16 GiB | 想用滚动更新的软件包和 Nyarch 主题 |
 | `arch-denial` | Arch Linux ARM + Denial | 16 GiB | 想用 pacman 和 Denial 触控桌面 |
-| `steamos` | Valve SteamOS ARM64 | 16 GiB | 玩游戏，详见 [SteamOS](steamos.md) |
+| `steamos` | Valve SteamOS ARM64 | 16 GiB | 玩游戏，详见 SteamOS（原文件未收录） |
 
 ## 安装
 

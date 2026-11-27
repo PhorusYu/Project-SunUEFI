@@ -1,5 +1,7 @@
 # 发布要求
 
+本页保留自 Project-SunUEFI，描述 Piano 的实现或开发工具，不表示 miro 已支持这些功能。未收录的历史文件已在正文标明；miro 的支持范围见[项目状态](../status.md)。
+
 源码公开和二进制发布是两件事。当前仓库提供源码和 CI 构建产物，正式发布前需要完成以下核对。当前支持情况见[项目状态](../status.md)。
 
 ## 公开源码前
@@ -139,7 +141,7 @@ ACPI 表。默认 Linux 启动仍使用完整板级设备树，UFS、USB 等外�
 | 充电保护与停充 | 普通 PD 下实测停充、输入保持在线、切回自动后重新充电；双路接口测温和隔离已接入板级设备树 | 对照原厂充电器检查暖区、接近满电时的停充和回充、接口保护触发与拔线恢复；再验证快充和 OTG 不受影响 |
 
 实现与来源见[相机控制](hardware/camera-controls.md)、
-[侧指纹](hardware/led-ir-fingerprint.md#侧指纹)、[笔协议](hardware/pen-protocol.md)
+[侧指纹](hardware/led-ir-fingerprint.md#侧指纹)、笔协议（原文件未收录）
 和[显示位深](hardware/display-depth.md)。
 
 ### 安装与产品交付
