@@ -102,6 +102,7 @@ def build_miro_dtb(src_dtb: Path, out_dtb: Path, work_dir: Path) -> None:
     dts_text = dts_file.read_text()
     tlmm_ph = find_phandle(dts_text, r"pinctrl@f100000\s*\{")
     l2g_ph = find_phandle(dts_text, r'regulator-name\s*=\s*"vreg_l2g_1p8";')
+    l12b_ph = find_phandle(dts_text, r'regulator-name\s*=\s*"vreg_l12b_1p8";')
     aoss_qmp_ph = find_phandle(dts_text, r"power-management@c300000\s*\{")
 
     overlay = f"""
@@ -178,6 +179,43 @@ def build_miro_dtb(src_dtb: Path, out_dtb: Path, work_dir: Path) -> None:
 				drive-strength = <2>;
 				bias-pull-down;
 				phandle = <0x7ffe>;
+			}};
+
+			ts_irq_active: ts-irq-active-state {{
+				pins = "gpio162";
+				function = "gpio";
+				drive-strength = <2>;
+				bias-pull-up;
+				input-enable;
+				phandle = <0x7ffd>;
+			}};
+		}};
+
+		dma-controller@a00000 {{
+			status = "okay";
+		}};
+
+		geniqup@ac0000 {{
+			spi@a88000 {{
+				status = "okay";
+
+				touchscreen@0 {{
+					compatible = "focaltech,ft3683-spi";
+					reg = <0>;
+					spi-max-frequency = <10000000>;
+					interrupt-parent = <{tlmm_ph}>;
+					interrupts = <162 2>;
+					pinctrl-names = "default";
+					pinctrl-0 = <0x7ffd>;
+					iovdd-supply = <{l12b_ph}>;
+					avdd-gpios = <{tlmm_ph} 114 0>;
+					reset-gpios = <{tlmm_ph} 161 1>;
+					/delete-property/ firmware-name;
+					/delete-property/ panel;
+					/delete-property/ novatek,irq-gpios;
+					/delete-property/ novatek,lcd-id-gpios;
+					/delete-property/ pinctrl-1;
+				}};
 			}};
 		}};
 

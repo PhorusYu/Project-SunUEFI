@@ -1,0 +1,411 @@
+diff --git a/drivers/input/touchscreen/Kconfig b/drivers/input/touchscreen/Kconfig
+index 064b877d5..b6fd68f8f 100644
+--- a/drivers/input/touchscreen/Kconfig
++++ b/drivers/input/touchscreen/Kconfig
+@@ -1416,4 +1416,12 @@ config TOUCHSCREEN_HIMAX_HX83112B
+ 
+ source "drivers/input/touchscreen/nt36532e/Kconfig"
+ 
++config TOUCHSCREEN_FOCALTECH_FT3683_SPI
++	tristate "FocalTech FT3683 SPI touchscreen driver"
++	depends on SPI_MASTER
++	help
++	  Say Y here to enable support for FocalTech FT3683 SPI touchscreens.
++
++	  If unsure, say N.
++
+ endif
+diff --git a/drivers/input/touchscreen/Makefile b/drivers/input/touchscreen/Makefile
+index aff201044..0b25cc2a2 100644
+--- a/drivers/input/touchscreen/Makefile
++++ b/drivers/input/touchscreen/Makefile
+@@ -120,3 +120,4 @@ obj-$(CONFIG_TOUCHSCREEN_IQS7211)	+= iqs7211.o
+ obj-$(CONFIG_TOUCHSCREEN_ZINITIX)	+= zinitix.o
+ obj-$(CONFIG_TOUCHSCREEN_HIMAX_HX83112B)	+= himax_hx83112b.o
+ obj-$(CONFIG_TOUCHSCREEN_NT36532E_SPI)	+= nt36532e/
++obj-$(CONFIG_TOUCHSCREEN_FOCALTECH_FT3683_SPI)	+= focaltech_ft3683_spi.o
+diff --git a/drivers/input/touchscreen/focaltech_ft3683_spi.c b/drivers/input/touchscreen/focaltech_ft3683_spi.c
+new file mode 100644
+index 000000000..6e4e974b5
+--- /dev/null
++++ b/drivers/input/touchscreen/focaltech_ft3683_spi.c
+@@ -0,0 +1,379 @@
++// SPDX-License-Identifier: GPL-2.0-only
++/*
++ * FocalTech FT3683 SPI touchscreen driver (Redmi K80 Pro / miro)
++ */
++
++#include <linux/delay.h>
++#include <linux/gpio/consumer.h>
++#include <linux/input.h>
++#include <linux/input/mt.h>
++#include <linux/input/touchscreen.h>
++#include <linux/interrupt.h>
++#include <linux/module.h>
++#include <linux/mutex.h>
++#include <linux/of.h>
++#include <linux/regulator/consumer.h>
++#include <linux/spi/spi.h>
++
++#define FTS_MAX_POINTS			10
++#define FTS_DEFAULT_MAX_X		1440
++#define FTS_DEFAULT_MAX_Y		3200
++#define FTS_SPI_HDR_LEN			7
++#define FTS_SPI_CRC_LEN			2
++#define FTS_TOUCH_BUF_LEN		(4 + 6 * FTS_MAX_POINTS)
++#define FTS_XFER_BUF_SIZE		(FTS_SPI_HDR_LEN + FTS_TOUCH_BUF_LEN + FTS_SPI_CRC_LEN)
++
++#define FTS_REG_TOUCH_DATA		0x01
++#define FTS_REG_INT_ACK			0x9E
++#define FTS_REG_CHIP_ID_L		0x9F
++#define FTS_REG_CHIP_ID_H		0xA3
++#define FTS_REG_POWER_MODE		0xA5
++
++#define FTS_CHIP_ID_H			0x36
++#define FTS_CHIP_ID_L			0x83
++
++#define FTS_EV_DOWN			0
++#define FTS_EV_UP			1
++#define FTS_EV_CONTACT			2
++
++struct ft3683_ts {
++	struct spi_device *spi;
++	struct input_dev *input;
++	struct touchscreen_properties prop;
++	struct regulator *iovdd;
++	struct gpio_desc *avdd_gpio;
++	struct gpio_desc *reset_gpio;
++	struct mutex spi_lock;
++	u8 *tx_buf;
++	u8 *rx_buf;
++};
++
++static u16 fts_crc16(const u8 *data, size_t len)
++{
++	u16 crc = 0xFFFF;
++	size_t i;
++	int b;
++
++	for (i = 0; i < len; i++) {
++		crc ^= data[i];
++		for (b = 0; b < 8; b++) {
++			if (crc & 1)
++				crc = (crc >> 1) ^ 0x8408;
++			else
++				crc >>= 1;
++		}
++	}
++	return crc;
++}
++
++static int fts_read(struct ft3683_ts *ts, u8 addr, u8 *out, u16 len)
++{
++	size_t total = FTS_SPI_HDR_LEN + len + FTS_SPI_CRC_LEN;
++	struct spi_transfer xfer = {
++		.tx_buf = ts->tx_buf,
++		.rx_buf = ts->rx_buf,
++		.len = total,
++	};
++	u16 calc_crc, rx_crc;
++	int ret;
++
++	if (total > FTS_XFER_BUF_SIZE)
++		return -EINVAL;
++
++	mutex_lock(&ts->spi_lock);
++
++	memset(ts->tx_buf, 0, total);
++	ts->tx_buf[0] = addr;
++	ts->tx_buf[1] = 0xA0;
++	ts->tx_buf[2] = (len >> 8) & 0xFF;
++	ts->tx_buf[3] = len & 0xFF;
++
++	ret = spi_sync_transfer(ts->spi, &xfer, 1);
++	if (ret)
++		goto out_unlock;
++
++	if (ts->rx_buf[3] & 0xA0) {
++		ret = -EIO;
++		goto out_unlock;
++	}
++
++	memcpy(out, &ts->rx_buf[FTS_SPI_HDR_LEN], len);
++	calc_crc = fts_crc16(out, len);
++	rx_crc = ts->rx_buf[FTS_SPI_HDR_LEN + len] |
++		 (ts->rx_buf[FTS_SPI_HDR_LEN + len + 1] << 8);
++	if (calc_crc != rx_crc) {
++		ret = -EBADMSG;
++		goto out_unlock;
++	}
++
++out_unlock:
++	mutex_unlock(&ts->spi_lock);
++	return ret;
++}
++
++static int fts_write_reg(struct ft3683_ts *ts, u8 addr, u8 val)
++{
++	struct spi_transfer xfer = {
++		.tx_buf = ts->tx_buf,
++		.rx_buf = ts->rx_buf,
++		.len = FTS_SPI_HDR_LEN + 1,
++	};
++	int ret;
++
++	mutex_lock(&ts->spi_lock);
++
++	memset(ts->tx_buf, 0, FTS_SPI_HDR_LEN + 1);
++	ts->tx_buf[0] = addr;
++	ts->tx_buf[1] = 0x00;
++	ts->tx_buf[2] = 0x00;
++	ts->tx_buf[3] = 0x01;
++	ts->tx_buf[7] = val;
++
++	ret = spi_sync_transfer(ts->spi, &xfer, 1);
++	if (!ret && (ts->rx_buf[3] & 0xA0))
++		ret = -EIO;
++
++	mutex_unlock(&ts->spi_lock);
++	return ret;
++}
++
++static int fts_read_reg(struct ft3683_ts *ts, u8 addr, u8 *val)
++{
++	return fts_read(ts, addr, val, 1);
++}
++
++static irqreturn_t fts_irq_handler(int irq, void *dev_id)
++{
++	struct ft3683_ts *ts = dev_id;
++	u8 buf[FTS_TOUCH_BUF_LEN];
++	u8 mode, points;
++	int i, ret;
++
++	ret = fts_read(ts, FTS_REG_TOUCH_DATA, buf, sizeof(buf));
++	if (ret) {
++		dev_dbg(&ts->spi->dev, "touch read failed: %d\n", ret);
++		return IRQ_HANDLED;
++	}
++
++	mode = buf[1] >> 4;
++	points = buf[1] & 0x0F;
++	if (points > FTS_MAX_POINTS)
++		points = FTS_MAX_POINTS;
++
++	for (i = 0; i < points; i++) {
++		size_t off;
++		u8 ev, id;
++		u16 px, py;
++		bool down;
++
++		if (mode == 2) {
++			off = 4 + 6 * i;
++			if (off + 5 >= sizeof(buf))
++				break;
++			px = (((buf[off] & 0x0F) << 12) |
++			      (buf[off + 1] << 4) |
++			      (buf[off + 4] >> 4)) >> 4;
++			py = (((buf[off + 2] & 0x0F) << 12) |
++			      (buf[off + 3] << 4) |
++			      (buf[off + 4] & 0x0F)) >> 4;
++		} else if (mode == 0) {
++			off = 2 + 6 * i;
++			if (off + 5 >= sizeof(buf))
++				break;
++			px = (((buf[off] & 0x0F) << 11) |
++			      (buf[off + 1] << 3) |
++			      ((buf[off + 4] >> 5) & 0x07)) / 10;
++			py = (((buf[off + 2] & 0x0F) << 11) |
++			      (buf[off + 3] << 3) |
++			      ((buf[off + 4] >> 3) & 0x07)) / 10;
++		} else {
++			break;
++		}
++
++		ev = buf[off] >> 6;
++		id = buf[off + 2] >> 4;
++		if (id >= FTS_MAX_POINTS)
++			continue;
++
++		down = (ev == FTS_EV_DOWN || ev == FTS_EV_CONTACT);
++		input_mt_slot(ts->input, id);
++		input_mt_report_slot_state(ts->input, MT_TOOL_FINGER, down);
++		if (down)
++			touchscreen_report_pos(ts->input, &ts->prop, px, py, true);
++	}
++
++	input_mt_sync_frame(ts->input);
++	input_sync(ts->input);
++	return IRQ_HANDLED;
++}
++
++static void fts_disable_iovdd(void *data)
++{
++	regulator_disable(data);
++}
++
++static int fts_hw_init(struct ft3683_ts *ts)
++{
++	u8 id_h = 0, id_l = 0, val = 0;
++	int retry, ret;
++
++	if (ts->iovdd) {
++		regulator_set_voltage(ts->iovdd, 1800000, 1800000);
++		ret = regulator_enable(ts->iovdd);
++		if (ret) {
++			dev_err(&ts->spi->dev, "failed to enable iovdd: %d\n", ret);
++			return ret;
++		}
++		ret = devm_add_action_or_reset(&ts->spi->dev, fts_disable_iovdd,
++					       ts->iovdd);
++		if (ret)
++			return ret;
++		msleep(5);
++	}
++
++	if (ts->avdd_gpio) {
++		gpiod_set_value_cansleep(ts->avdd_gpio, 1);
++		msleep(10);
++	}
++
++	gpiod_set_value_cansleep(ts->reset_gpio, 1);
++	msleep(10);
++	gpiod_set_value_cansleep(ts->reset_gpio, 0);
++	msleep(200);
++
++	for (retry = 0; retry < 5; retry++) {
++		ret = fts_read_reg(ts, FTS_REG_CHIP_ID_H, &id_h);
++		if (!ret)
++			ret = fts_read_reg(ts, FTS_REG_CHIP_ID_L, &id_l);
++		if (!ret && id_h == FTS_CHIP_ID_H && id_l == FTS_CHIP_ID_L)
++			break;
++		msleep(20);
++	}
++
++	if (ret || id_h != FTS_CHIP_ID_H || id_l != FTS_CHIP_ID_L) {
++		dev_err(&ts->spi->dev,
++			"unexpected chip ID: 0x%02x 0x%02x (ret=%d, rx=%*ph)\n",
++			id_h, id_l, ret, 10, ts->rx_buf);
++		return ret ? ret : -ENODEV;
++	}
++
++	if (!fts_read_reg(ts, FTS_REG_INT_ACK, &val) && val != 0) {
++		fts_write_reg(ts, FTS_REG_INT_ACK, 0x00);
++		msleep(20);
++	}
++
++	if (!fts_read_reg(ts, FTS_REG_POWER_MODE, &val) && val != 0) {
++		fts_write_reg(ts, FTS_REG_POWER_MODE, 0x00);
++		msleep(20);
++	}
++
++	dev_info(&ts->spi->dev, "FocalTech FT3683 detected (ID 0x%02x%02x)\n",
++		 id_h, id_l);
++	return 0;
++}
++
++static int fts_probe(struct spi_device *spi)
++{
++	struct ft3683_ts *ts;
++	struct input_dev *input;
++	int ret;
++
++	spi->mode = SPI_MODE_0;
++	spi->bits_per_word = 8;
++	if (!spi->max_speed_hz)
++		spi->max_speed_hz = 10000000;
++	ret = spi_setup(spi);
++	if (ret)
++		return ret;
++
++	ts = devm_kzalloc(&spi->dev, sizeof(*ts), GFP_KERNEL);
++	if (!ts)
++		return -ENOMEM;
++
++	ts->tx_buf = devm_kzalloc(&spi->dev, FTS_XFER_BUF_SIZE, GFP_KERNEL | GFP_DMA);
++	ts->rx_buf = devm_kzalloc(&spi->dev, FTS_XFER_BUF_SIZE, GFP_KERNEL | GFP_DMA);
++	if (!ts->tx_buf || !ts->rx_buf)
++		return -ENOMEM;
++
++	ts->spi = spi;
++	mutex_init(&ts->spi_lock);
++	spi_set_drvdata(spi, ts);
++
++	ts->iovdd = devm_regulator_get_optional(&spi->dev, "iovdd");
++	if (IS_ERR(ts->iovdd)) {
++		if (PTR_ERR(ts->iovdd) == -ENODEV)
++			ts->iovdd = NULL;
++		else
++			return dev_err_probe(&spi->dev, PTR_ERR(ts->iovdd),
++					     "failed to get iovdd regulator\n");
++	}
++
++	ts->avdd_gpio = devm_gpiod_get_optional(&spi->dev, "avdd", GPIOD_OUT_HIGH);
++	if (IS_ERR(ts->avdd_gpio))
++		return dev_err_probe(&spi->dev, PTR_ERR(ts->avdd_gpio),
++				     "failed to get avdd gpio\n");
++
++	ts->reset_gpio = devm_gpiod_get(&spi->dev, "reset", GPIOD_OUT_HIGH);
++	if (IS_ERR(ts->reset_gpio))
++		return dev_err_probe(&spi->dev, PTR_ERR(ts->reset_gpio),
++				     "failed to get reset gpio\n");
++
++	ret = fts_hw_init(ts);
++	if (ret)
++		return ret;
++
++	input = devm_input_allocate_device(&spi->dev);
++	if (!input)
++		return -ENOMEM;
++
++	ts->input = input;
++	input->name = "FocalTech FT3683 Touchscreen";
++	input->id.bustype = BUS_SPI;
++	input->dev.parent = &spi->dev;
++
++	input_set_abs_params(input, ABS_MT_POSITION_X, 0, FTS_DEFAULT_MAX_X - 1, 0, 0);
++	input_set_abs_params(input, ABS_MT_POSITION_Y, 0, FTS_DEFAULT_MAX_Y - 1, 0, 0);
++	touchscreen_parse_properties(input, true, &ts->prop);
++
++	ret = input_mt_init_slots(input, FTS_MAX_POINTS,
++				  INPUT_MT_DIRECT | INPUT_MT_DROP_UNUSED);
++	if (ret)
++		return ret;
++
++	ret = input_register_device(input);
++	if (ret)
++		return ret;
++
++	ret = devm_request_threaded_irq(&spi->dev, spi->irq, NULL,
++					fts_irq_handler, IRQF_ONESHOT,
++					dev_name(&spi->dev), ts);
++	if (ret)
++		return dev_err_probe(&spi->dev, ret, "failed to request irq\n");
++
++	return 0;
++}
++
++static const struct of_device_id fts_of_match[] = {
++	{ .compatible = "focaltech,ft3683-spi" },
++	{ /* sentinel */ }
++};
++MODULE_DEVICE_TABLE(of, fts_of_match);
++
++static const struct spi_device_id fts_spi_id[] = {
++	{ "ft3683-spi", 0 },
++	{ /* sentinel */ }
++};
++MODULE_DEVICE_TABLE(spi, fts_spi_id);
++
++static struct spi_driver fts_driver = {
++	.driver = {
++		.name = "focaltech-ft3683-spi",
++		.of_match_table = fts_of_match,
++	},
++	.probe = fts_probe,
++	.id_table = fts_spi_id,
++};
++module_spi_driver(fts_driver);
++
++MODULE_DESCRIPTION("FocalTech FT3683 SPI touchscreen driver");
++MODULE_LICENSE("GPL");
