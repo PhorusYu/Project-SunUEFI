@@ -1,0 +1,603 @@
+diff --git a/drivers/power/supply/Kconfig b/drivers/power/supply/Kconfig
+index a080578f5..866096b6d 100644
+--- a/drivers/power/supply/Kconfig
++++ b/drivers/power/supply/Kconfig
+@@ -230,6 +230,15 @@ config BATTERY_PIANO_MCA_KUNIT_TEST
+ 	  a virtual ADSP transport, battery gauges and charge pump. Run only in
+ 	  UML so the suite cannot access the tablet's real power supplies.
+ 
++config BATTERY_MIRO_MCA
++	tristate "Redmi K80 Pro MCA charger telemetry"
++	depends on QCOM_PMIC_GLINK && OF
++	select AUXILIARY_BUS
++	help
++	  Read USB charger measurements from the Xiaomi MCA ADSP service.
++	  This driver does not control charging. Battery measurements come
++	  from the separate fuel gauge.
++
+ config BATTERY_QCOM_BATTMGR
+ 	tristate "Qualcomm PMIC GLINK battery manager support"
+ 	depends on QCOM_PMIC_GLINK
+diff --git a/drivers/power/supply/Makefile b/drivers/power/supply/Makefile
+index 158b781f5..69dffe888 100644
+--- a/drivers/power/supply/Makefile
++++ b/drivers/power/supply/Makefile
+@@ -37,6 +37,7 @@ obj-$(CONFIG_BATTERY_HUAWEI_GAOKUN)	+= huawei-gaokun-battery.o
+ obj-$(CONFIG_BATTERY_LEGO_EV3)	+= lego_ev3_battery.o
+ obj-$(CONFIG_BATTERY_LENOVO_YOGA_C630) += lenovo_yoga_c630_battery.o
+ obj-$(CONFIG_BATTERY_PMU)	+= pmu_battery.o
++obj-$(CONFIG_BATTERY_MIRO_MCA)	+= miro_mca.o
+ obj-$(CONFIG_BATTERY_QCOM_BATTMGR)	+= qcom_battmgr.o
+ obj-$(CONFIG_BATTERY_PIANO_MCA)	+= piano_mca.o
+ obj-$(CONFIG_BATTERY_PIANO_MCA_KUNIT_TEST) += piano_mca_test.o
+diff --git a/drivers/power/supply/miro_mca.c b/drivers/power/supply/miro_mca.c
+new file mode 100644
+index 000000000..d8e0476e7
+--- /dev/null
++++ b/drivers/power/supply/miro_mca.c
+@@ -0,0 +1,542 @@
++// SPDX-License-Identifier: GPL-2.0-only
++/*
++ * Xiaomi MCA charger telemetry and safe 5 V charging control for Redmi K80 Pro.
++ */
++#include <linux/auxiliary_bus.h>
++#include <linux/completion.h>
++#include <linux/module.h>
++#include <linux/mutex.h>
++#include <linux/of.h>
++#include <linux/power_supply.h>
++#include <linux/soc/qcom/pdr.h>
++#include <linux/soc/qcom/pmic_glink.h>
++#include <linux/spinlock.h>
++#include <linux/workqueue.h>
++
++#define MIRO_MCA_READ		1
++#define MIRO_MCA_WRITE		2
++#define MIRO_MCA_DATA_LEN	256
++
++#define MIRO_MCA_CHARGE_ENABLE	0x2003
++#define MIRO_MCA_FCC		0x2005
++#define MIRO_MCA_FV		0x2007
++#define MIRO_MCA_ICL		0x2008
++#define MIRO_MCA_BUS_VOLT	0x20002
++#define MIRO_MCA_BUS_CURR	0x20004
++#define MIRO_MCA_REAL_TYPE	0x2000c
++
++#define MIRO_MCA_POLL_MS	3000
++#define MIRO_MCA_ICL_MIN_MA	100
++#define MIRO_MCA_FCC_MIN_MA	500
++#define MIRO_MCA_SAFE_FV_MV	4400
++#define MIRO_MCA_MAX_VBAT_UV	4450000
++#define MIRO_MCA_MIN_TEMP_DC	0
++#define MIRO_MCA_MAX_TEMP_DC	450
++
++struct miro_mca_request {
++	struct pmic_glink_hdr hdr;
++	__le32 property;
++	__le32 seq;
++	u8 data[MIRO_MCA_DATA_LEN];
++};
++
++struct miro_mca_response {
++	struct pmic_glink_hdr hdr;
++	__le32 property;
++	__le32 result;
++	__le32 seq;
++	u8 data[MIRO_MCA_DATA_LEN];
++};
++
++struct miro_mca {
++	struct pmic_glink_client *client;
++	struct power_supply *usb;
++	struct delayed_work poll;
++	struct completion ack;
++	spinlock_t lock;
++	struct mutex cache_lock;
++	struct mutex policy_lock;
++	bool service_up;
++	bool stopped;
++	bool pending;
++	u32 seq;
++	u32 opcode;
++	u32 property;
++	int error;
++	__le32 value;
++
++	bool valid;
++	unsigned int cache_generation;
++	u32 voltage;
++	u32 bus_current;
++	enum power_supply_usb_type type;
++
++	bool inhibit;
++	bool chg_active;
++	u32 applied_icl;
++	u32 applied_fcc;
++	u32 applied_fv;
++};
++
++static void miro_mca_callback(const void *data, size_t len, void *priv)
++{
++	const struct miro_mca_response *resp = data;
++	struct miro_mca *mca = priv;
++	unsigned long flags;
++
++	if (len < sizeof(resp->hdr) ||
++	    le32_to_cpu(resp->hdr.owner) != PMIC_GLINK_OWNER_BATTMGR)
++		return;
++
++	spin_lock_irqsave(&mca->lock, flags);
++	if (mca->stopped || !mca->service_up)
++		goto unlock;
++	if (le32_to_cpu(resp->hdr.type) == PMIC_GLINK_NOTIFY) {
++		mod_delayed_work(system_freezable_wq, &mca->poll, 0);
++		goto unlock;
++	}
++	if (len != sizeof(*resp) || !mca->pending ||
++	    le32_to_cpu(resp->hdr.type) != PMIC_GLINK_REQ_RESP ||
++	    le32_to_cpu(resp->hdr.opcode) != mca->opcode ||
++	    le32_to_cpu(resp->property) != mca->property ||
++	    le32_to_cpu(resp->seq) != mca->seq)
++		goto unlock;
++
++	mca->error = le32_to_cpu(resp->result) ? -EIO : 0;
++	if (!mca->error && mca->opcode == MIRO_MCA_READ)
++		memcpy(&mca->value, resp->data, sizeof(mca->value));
++	mca->pending = false;
++	complete(&mca->ack);
++unlock:
++	spin_unlock_irqrestore(&mca->lock, flags);
++}
++
++static int miro_mca_xfer_u32(struct miro_mca *mca, u32 opcode, u32 property,
++			     u32 *value)
++{
++	struct miro_mca_request req = {
++		.hdr.owner = cpu_to_le32(PMIC_GLINK_OWNER_BATTMGR),
++		.hdr.type = cpu_to_le32(PMIC_GLINK_REQ_RESP),
++		.hdr.opcode = cpu_to_le32(opcode),
++		.property = cpu_to_le32(property),
++	};
++	__le32 le_val = cpu_to_le32(*value);
++	unsigned long flags;
++	unsigned int generation;
++	int ret;
++
++	if (opcode == MIRO_MCA_WRITE)
++		memcpy(req.data, &le_val, sizeof(le_val));
++
++	generation = pmic_glink_get_generation(mca->client);
++	spin_lock_irqsave(&mca->lock, flags);
++	if (!mca->service_up || mca->stopped) {
++		spin_unlock_irqrestore(&mca->lock, flags);
++		return -ENOTCONN;
++	}
++	reinit_completion(&mca->ack);
++	mca->opcode = opcode;
++	mca->property = property;
++	req.seq = cpu_to_le32(++mca->seq);
++	mca->error = -ETIMEDOUT;
++	mca->pending = true;
++	spin_unlock_irqrestore(&mca->lock, flags);
++
++	ret = pmic_glink_send_generation(mca->client, &req, sizeof(req), generation);
++	if (!ret)
++		wait_for_completion_timeout(&mca->ack, msecs_to_jiffies(1000));
++
++	spin_lock_irqsave(&mca->lock, flags);
++	if (!ret)
++		ret = mca->error;
++	mca->pending = false;
++	if (!ret && opcode == MIRO_MCA_READ)
++		*value = le32_to_cpu(mca->value);
++	spin_unlock_irqrestore(&mca->lock, flags);
++	return ret;
++}
++
++static int miro_mca_read(struct miro_mca *mca, u32 property, u32 *value)
++{
++	*value = 0;
++	return miro_mca_xfer_u32(mca, MIRO_MCA_READ, property, value);
++}
++
++static int miro_mca_write(struct miro_mca *mca, u32 property, u32 value)
++{
++	return miro_mca_xfer_u32(mca, MIRO_MCA_WRITE, property, &value);
++}
++
++static enum power_supply_usb_type miro_mca_usb_type(u32 type)
++{
++	switch (type) {
++	case 1:
++		return POWER_SUPPLY_USB_TYPE_SDP;
++	case 2:
++		return POWER_SUPPLY_USB_TYPE_CDP;
++	case 3:
++	case 5:
++	case 6:
++	case 7:
++	case 8:
++	case 15:
++		return POWER_SUPPLY_USB_TYPE_DCP;
++	case 9:
++		return POWER_SUPPLY_USB_TYPE_C;
++	case 10:
++	case 12:
++		return POWER_SUPPLY_USB_TYPE_PD;
++	case 11:
++		return POWER_SUPPLY_USB_TYPE_PD_PPS;
++	case 14:
++		return POWER_SUPPLY_USB_TYPE_ACA;
++	default:
++		return POWER_SUPPLY_USB_TYPE_UNKNOWN;
++	}
++}
++
++static void miro_mca_limits_for_type(u32 raw_type, u32 *icl_ma, u32 *fcc_ma)
++{
++	switch (raw_type) {
++	case 1: /* SDP */
++		*icl_ma = 500;
++		*fcc_ma = 500;
++		break;
++	case 2: /* CDP */
++		*icl_ma = 900;
++		*fcc_ma = 900;
++		break;
++	case 9: /* Type-C / Float */
++		*icl_ma = 1000;
++		*fcc_ma = 1000;
++		break;
++	case 3:
++	case 5:
++	case 6:
++	case 7:
++	case 8:
++	case 10:
++	case 11:
++	case 12:
++	case 15: /* DCP / HVDCP / PD / PPS (5 V safe cap) */
++		*icl_ma = 1500;
++		*fcc_ma = 1500;
++		break;
++	default:
++		*icl_ma = 500;
++		*fcc_ma = 500;
++		break;
++	}
++}
++
++static bool miro_mca_gauge_safe(void)
++{
++	struct power_supply *gauge;
++	union power_supply_propval val;
++	int ret;
++
++	gauge = power_supply_get_by_name("bq27z561-0");
++	if (!gauge)
++		return false;
++
++	ret = power_supply_get_property(gauge, POWER_SUPPLY_PROP_PRESENT, &val);
++	if (ret || val.intval != 1)
++		goto unsafe;
++
++	ret = power_supply_get_property(gauge, POWER_SUPPLY_PROP_HEALTH, &val);
++	if (ret || val.intval != POWER_SUPPLY_HEALTH_GOOD)
++		goto unsafe;
++
++	ret = power_supply_get_property(gauge, POWER_SUPPLY_PROP_TEMP, &val);
++	if (ret || val.intval < MIRO_MCA_MIN_TEMP_DC ||
++	    val.intval > MIRO_MCA_MAX_TEMP_DC)
++		goto unsafe;
++
++	ret = power_supply_get_property(gauge, POWER_SUPPLY_PROP_VOLTAGE_NOW, &val);
++	if (ret || val.intval <= 0 || val.intval > MIRO_MCA_MAX_VBAT_UV)
++		goto unsafe;
++
++	power_supply_put(gauge);
++	return true;
++
++unsafe:
++	power_supply_put(gauge);
++	return false;
++}
++
++static void miro_mca_disable_charging_locked(struct miro_mca *mca)
++{
++	if (mca->chg_active) {
++		miro_mca_write(mca, MIRO_MCA_CHARGE_ENABLE, 0);
++		mca->chg_active = false;
++	}
++	if (mca->applied_icl != MIRO_MCA_ICL_MIN_MA) {
++		if (!miro_mca_write(mca, MIRO_MCA_ICL, MIRO_MCA_ICL_MIN_MA))
++			mca->applied_icl = MIRO_MCA_ICL_MIN_MA;
++	}
++	if (mca->applied_fcc != MIRO_MCA_FCC_MIN_MA) {
++		if (!miro_mca_write(mca, MIRO_MCA_FCC, MIRO_MCA_FCC_MIN_MA))
++			mca->applied_fcc = MIRO_MCA_FCC_MIN_MA;
++	}
++}
++
++static void miro_mca_apply_policy(struct miro_mca *mca, bool online, u32 raw_type)
++{
++	u32 target_icl, target_fcc;
++
++	mutex_lock(&mca->policy_lock);
++	if (READ_ONCE(mca->stopped) || !READ_ONCE(mca->service_up) ||
++	    !online || mca->inhibit || !miro_mca_gauge_safe()) {
++		miro_mca_disable_charging_locked(mca);
++		goto unlock;
++	}
++
++	miro_mca_limits_for_type(raw_type, &target_icl, &target_fcc);
++	if (mca->applied_fv != MIRO_MCA_SAFE_FV_MV) {
++		if (!miro_mca_write(mca, MIRO_MCA_FV, MIRO_MCA_SAFE_FV_MV))
++			mca->applied_fv = MIRO_MCA_SAFE_FV_MV;
++	}
++	if (mca->applied_icl != target_icl) {
++		if (!miro_mca_write(mca, MIRO_MCA_ICL, target_icl))
++			mca->applied_icl = target_icl;
++	}
++	if (mca->applied_fcc != target_fcc) {
++		if (!miro_mca_write(mca, MIRO_MCA_FCC, target_fcc))
++			mca->applied_fcc = target_fcc;
++	}
++	if (!mca->chg_active) {
++		if (!miro_mca_write(mca, MIRO_MCA_CHARGE_ENABLE, 1))
++			mca->chg_active = true;
++	}
++unlock:
++	mutex_unlock(&mca->policy_lock);
++}
++
++static void miro_mca_poll(struct work_struct *work)
++{
++	struct miro_mca *mca = container_of(to_delayed_work(work), struct miro_mca, poll);
++	u32 voltage = 0, bus_current = 0, raw_type = 0;
++	unsigned long flags;
++	bool changed, valid, online;
++	int ret;
++	unsigned int generation = pmic_glink_get_generation(mca->client);
++
++	ret = miro_mca_read(mca, MIRO_MCA_BUS_VOLT, &voltage);
++	if (!ret && voltage >= 4000000) {
++		ret = miro_mca_read(mca, MIRO_MCA_BUS_CURR, &bus_current);
++		ret = ret ?: miro_mca_read(mca, MIRO_MCA_REAL_TYPE, &raw_type);
++	}
++	valid = !ret && voltage <= INT_MAX && bus_current <= INT_MAX &&
++		generation == pmic_glink_get_generation(mca->client);
++	online = valid && voltage >= 4000000;
++
++	miro_mca_apply_policy(mca, online, raw_type);
++
++	mutex_lock(&mca->cache_lock);
++	changed = mca->valid != valid || mca->voltage != voltage ||
++		  mca->bus_current != bus_current ||
++		  mca->type != miro_mca_usb_type(raw_type);
++	mca->valid = valid;
++	mca->cache_generation = generation;
++	mca->voltage = voltage;
++	mca->bus_current = bus_current;
++	mca->type = miro_mca_usb_type(raw_type);
++	mutex_unlock(&mca->cache_lock);
++	if (changed)
++		power_supply_changed(mca->usb);
++
++	spin_lock_irqsave(&mca->lock, flags);
++	if (!mca->stopped && mca->service_up)
++		queue_delayed_work(system_freezable_wq, &mca->poll,
++				   msecs_to_jiffies(MIRO_MCA_POLL_MS));
++	spin_unlock_irqrestore(&mca->lock, flags);
++}
++
++static void miro_mca_pdr_notify(void *priv, int state)
++{
++	struct miro_mca *mca = priv;
++	unsigned long flags;
++
++	spin_lock_irqsave(&mca->lock, flags);
++	mca->service_up = state == SERVREG_SERVICE_STATE_UP;
++	if (!mca->service_up && mca->pending) {
++		mca->error = -ENOTCONN;
++		mca->pending = false;
++		complete(&mca->ack);
++	}
++	if (!mca->stopped)
++		mod_delayed_work(system_freezable_wq, &mca->poll, 0);
++	spin_unlock_irqrestore(&mca->lock, flags);
++}
++
++static int miro_mca_get_property(struct power_supply *psy,
++				 enum power_supply_property prop,
++				 union power_supply_propval *val)
++{
++	struct miro_mca *mca = power_supply_get_drvdata(psy);
++	int ret = 0;
++
++	mutex_lock(&mca->cache_lock);
++	if (prop == POWER_SUPPLY_PROP_CHARGE_BEHAVIOUR) {
++		val->intval = READ_ONCE(mca->inhibit) ?
++			POWER_SUPPLY_CHARGE_BEHAVIOUR_INHIBIT_CHARGE :
++			POWER_SUPPLY_CHARGE_BEHAVIOUR_AUTO;
++		goto unlock;
++	}
++	/* Keep the type readable before the ADSP is ready for coldplug. */
++	if (prop == POWER_SUPPLY_PROP_USB_TYPE) {
++		val->intval = mca->valid && READ_ONCE(mca->service_up) &&
++			mca->cache_generation == pmic_glink_get_generation(mca->client) ?
++			mca->type : POWER_SUPPLY_USB_TYPE_UNKNOWN;
++		goto unlock;
++	}
++	if (!mca->valid || !READ_ONCE(mca->service_up) ||
++	    mca->cache_generation != pmic_glink_get_generation(mca->client)) {
++		ret = -ENODATA;
++		goto unlock;
++	}
++	switch (prop) {
++	case POWER_SUPPLY_PROP_ONLINE:
++		val->intval = mca->voltage >= 4000000;
++		break;
++	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
++		val->intval = mca->voltage;
++		break;
++	case POWER_SUPPLY_PROP_CURRENT_NOW:
++		val->intval = mca->bus_current;
++		break;
++	default:
++		ret = -EINVAL;
++	}
++unlock:
++	mutex_unlock(&mca->cache_lock);
++	return ret;
++}
++
++static int miro_mca_set_property(struct power_supply *psy,
++				 enum power_supply_property prop,
++				 const union power_supply_propval *val)
++{
++	struct miro_mca *mca = power_supply_get_drvdata(psy);
++
++	if (prop != POWER_SUPPLY_PROP_CHARGE_BEHAVIOUR)
++		return -EINVAL;
++	if (val->intval != POWER_SUPPLY_CHARGE_BEHAVIOUR_AUTO &&
++	    val->intval != POWER_SUPPLY_CHARGE_BEHAVIOUR_INHIBIT_CHARGE)
++		return -EINVAL;
++
++	WRITE_ONCE(mca->inhibit,
++		   val->intval == POWER_SUPPLY_CHARGE_BEHAVIOUR_INHIBIT_CHARGE);
++	mod_delayed_work(system_freezable_wq, &mca->poll, 0);
++	power_supply_changed(mca->usb);
++	return 0;
++}
++
++static int miro_mca_property_is_writeable(struct power_supply *psy,
++					  enum power_supply_property prop)
++{
++	return prop == POWER_SUPPLY_PROP_CHARGE_BEHAVIOUR;
++}
++
++static const enum power_supply_property miro_mca_properties[] = {
++	POWER_SUPPLY_PROP_ONLINE,
++	POWER_SUPPLY_PROP_VOLTAGE_NOW,
++	POWER_SUPPLY_PROP_CURRENT_NOW,
++	POWER_SUPPLY_PROP_USB_TYPE,
++	POWER_SUPPLY_PROP_CHARGE_BEHAVIOUR,
++};
++
++static const struct power_supply_desc miro_mca_desc = {
++	.name = "miro-mca-usb",
++	.type = POWER_SUPPLY_TYPE_USB,
++	.properties = miro_mca_properties,
++	.num_properties = ARRAY_SIZE(miro_mca_properties),
++	.usb_types = BIT(POWER_SUPPLY_USB_TYPE_UNKNOWN) |
++		     BIT(POWER_SUPPLY_USB_TYPE_SDP) | BIT(POWER_SUPPLY_USB_TYPE_CDP) |
++		     BIT(POWER_SUPPLY_USB_TYPE_DCP) | BIT(POWER_SUPPLY_USB_TYPE_C) |
++		     BIT(POWER_SUPPLY_USB_TYPE_PD) | BIT(POWER_SUPPLY_USB_TYPE_PD_PPS) |
++		     BIT(POWER_SUPPLY_USB_TYPE_ACA),
++	.charge_behaviours =
++		BIT(POWER_SUPPLY_CHARGE_BEHAVIOUR_AUTO) |
++		BIT(POWER_SUPPLY_CHARGE_BEHAVIOUR_INHIBIT_CHARGE),
++	.get_property = miro_mca_get_property,
++	.set_property = miro_mca_set_property,
++	.property_is_writeable = miro_mca_property_is_writeable,
++};
++
++static void miro_mca_stop(void *data)
++{
++	struct miro_mca *mca = data;
++	unsigned long flags;
++
++	mutex_lock(&mca->policy_lock);
++	miro_mca_disable_charging_locked(mca);
++	mutex_unlock(&mca->policy_lock);
++
++	spin_lock_irqsave(&mca->lock, flags);
++	mca->stopped = true;
++	if (mca->pending) {
++		mca->error = -ENOTCONN;
++		mca->pending = false;
++		complete(&mca->ack);
++	}
++	spin_unlock_irqrestore(&mca->lock, flags);
++	cancel_delayed_work_sync(&mca->poll);
++}
++
++static int miro_mca_probe(struct auxiliary_device *adev,
++			  const struct auxiliary_device_id *id)
++{
++	struct device *dev = &adev->dev;
++	struct power_supply_config cfg = {};
++	struct miro_mca *mca;
++	int ret;
++
++	if (!of_machine_is_compatible("xiaomi,miro"))
++		return -ENODEV;
++	mca = devm_kzalloc(dev, sizeof(*mca), GFP_KERNEL);
++	if (!mca)
++		return -ENOMEM;
++	spin_lock_init(&mca->lock);
++	mutex_init(&mca->cache_lock);
++	mutex_init(&mca->policy_lock);
++	init_completion(&mca->ack);
++	INIT_DELAYED_WORK(&mca->poll, miro_mca_poll);
++	auxiliary_set_drvdata(adev, mca);
++	mca->client = devm_pmic_glink_client_alloc(dev, PMIC_GLINK_OWNER_BATTMGR,
++						 miro_mca_callback,
++						 miro_mca_pdr_notify, mca);
++	if (IS_ERR(mca->client))
++		return PTR_ERR(mca->client);
++	cfg.drv_data = mca;
++	mca->usb = devm_power_supply_register(dev, &miro_mca_desc, &cfg);
++	if (IS_ERR(mca->usb))
++		return PTR_ERR(mca->usb);
++	ret = devm_add_action_or_reset(dev, miro_mca_stop, mca);
++	if (ret)
++		return ret;
++	pmic_glink_client_register(mca->client);
++	return 0;
++}
++
++static void miro_mca_shutdown(struct auxiliary_device *adev)
++{
++	miro_mca_stop(auxiliary_get_drvdata(adev));
++}
++
++static const struct auxiliary_device_id miro_mca_id_table[] = {
++	{ .name = "pmic_glink.power-supply" },
++	{},
++};
++MODULE_DEVICE_TABLE(auxiliary, miro_mca_id_table);
++
++static struct auxiliary_driver miro_mca_driver = {
++	.name = "miro_mca",
++	.probe = miro_mca_probe,
++	.shutdown = miro_mca_shutdown,
++	.id_table = miro_mca_id_table,
++};
++module_auxiliary_driver(miro_mca_driver);
++
++MODULE_DESCRIPTION("Redmi K80 Pro MCA charger telemetry and safe 5 V charging");
++MODULE_LICENSE("GPL");
+diff --git a/drivers/power/supply/qcom_battmgr.c b/drivers/power/supply/qcom_battmgr.c
+index 74ee7ae03..22a4c27c4 100644
+--- a/drivers/power/supply/qcom_battmgr.c
++++ b/drivers/power/supply/qcom_battmgr.c
+@@ -9,6 +9,7 @@
+ #include <linux/module.h>
+ #include <linux/mutex.h>
+ #include <linux/nvmem-consumer.h>
++#include <linux/of.h>
+ #include <linux/of_device.h>
+ #include <linux/power_supply.h>
+ #include <linux/property.h>
+@@ -1637,6 +1638,10 @@ static int qcom_battmgr_probe(struct auxiliary_device *adev,
+ 	struct device *dev = &adev->dev;
+ 	int ret;
+ 
++	/* Xiaomi uses MCA on this board, rather than the Qualcomm protocol. */
++	if (of_machine_is_compatible("xiaomi,miro"))
++		return -ENODEV;
++
+ 	battmgr = devm_kzalloc(dev, sizeof(*battmgr), GFP_KERNEL);
+ 	if (!battmgr)
+ 		return -ENOMEM;

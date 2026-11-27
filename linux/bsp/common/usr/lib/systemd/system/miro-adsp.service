@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: MIT
+[Unit]
+Description=Start Redmi K80 Pro ADSP after the root filesystem is mounted
+After=local-fs.target pd-mapper.service
+Wants=pd-mapper.service
+Before=display-manager.service
+ConditionPathExists=/lib/firmware/qcom/sm8750/adsp.mbn
+ConditionPathExists=/sys/class/remoteproc/remoteproc0/state
+
+[Service]
+Type=oneshot
+ExecCondition=/usr/bin/grep -aq xiaomi,miro /sys/firmware/devicetree/base/compatible
+ExecStart=/bin/sh -ec 'if ! grep -qx running /sys/class/remoteproc/remoteproc0/state; then echo start > /sys/class/remoteproc/remoteproc0/state; fi'
+ExecStop=/bin/sh -ec 'if grep -qx running /sys/class/remoteproc/remoteproc0/state; then echo stop > /sys/class/remoteproc/remoteproc0/state; fi'
+RemainAfterExit=yes
+TimeoutStartSec=20
+
+[Install]
+WantedBy=multi-user.target

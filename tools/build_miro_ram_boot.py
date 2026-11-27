@@ -103,10 +103,14 @@ def build_miro_dtb(src_dtb: Path, out_dtb: Path, work_dir: Path) -> None:
     tlmm_ph = find_phandle(dts_text, r"pinctrl@f100000\s*\{")
     l2g_ph = find_phandle(dts_text, r'regulator-name\s*=\s*"vreg_l2g_1p8";')
     l12b_ph = find_phandle(dts_text, r'regulator-name\s*=\s*"vreg_l12b_1p8";')
+    pm8550_gpio_ph = find_phandle(dts_text, r'compatible\s*=\s*"qcom,pm8550-gpio"')
     aoss_qmp_ph = find_phandle(dts_text, r"power-management@c300000\s*\{")
 
+    # Retain the installed UEFI memory-fixup compatible while identifying miro first.
     overlay = f"""
 / {{
+	model = "Xiaomi Redmi K80 Pro";
+	compatible = "xiaomi,miro", "xiaomi,piano", "qcom,sm8750";
 	display_panel_vddd: regulator-vddd {{
 		compatible = "regulator-fixed";
 		regulator-name = "display_panel_vddd";
@@ -138,6 +142,17 @@ def build_miro_dtb(src_dtb: Path, out_dtb: Path, work_dir: Path) -> None:
 	regulator-vsp {{ status = "disabled"; }};
 	regulator-vsn {{ status = "disabled"; }};
 
+	gpio-keys {{
+		compatible = "gpio-keys";
+
+		vol-up {{
+			label = "Volume Up";
+			linux,code = <115>;
+			gpios = <{pm8550_gpio_ph} 6 1>;
+			debounce-interval = <15>;
+		}};
+	}};
+
 	wcn7850-pmu {{
 		compatible = "qcom,wcn7861-pmu";
 		qcom,qmp = <{aoss_qmp_ph}>;
@@ -162,7 +177,7 @@ def build_miro_dtb(src_dtb: Path, out_dtb: Path, work_dir: Path) -> None:
 		ranges;
 
 		gunyah-hyp-extra@80e40000 {{ reg = <0x00 0x80e40000 0x00 0x003c0000>; no-map; }};
-		adspslpi_extra@a2880000 {{ reg = <0x00 0xa2880000 0x00 0x00b00000>; no-map; }};
+		adspslpi@9ee00000 {{ reg = <0x00 0x9ee00000 0x00 0x04580000>; no-map; }};
 		display_demura@a3500000 {{ reg = <0x00 0xa3500000 0x00 0x04100000>; no-map; }};
 		shm@fc000000 {{ reg = <0x00 0xfc000000 0x00 0x00400000>; no-map; }};
 		uefi_fb@fc800000 {{ reg = <0x00 0xfc800000 0x00 0x02000000>; no-map; }};
@@ -195,7 +210,26 @@ def build_miro_dtb(src_dtb: Path, out_dtb: Path, work_dir: Path) -> None:
 			status = "okay";
 		}};
 
+		geniqup@8c0000 {{
+			status = "okay";
+			serial@898000 {{
+				bluetooth {{
+					max-speed = <115200>;
+				}};
+			}};
+		}};
+
 		geniqup@ac0000 {{
+			i2c@a94000 {{
+				status = "okay";
+				clock-frequency = <100000>;
+
+				battery@55 {{
+					compatible = "ti,bq27z561";
+					reg = <0x55>;
+				}};
+			}};
+
 			spi@a88000 {{
 				status = "okay";
 
@@ -259,6 +293,19 @@ def build_miro_dtb(src_dtb: Path, out_dtb: Path, work_dir: Path) -> None:
 		soundwire@6ad0000 {{ status = "disabled"; }};
 		soundwire@6b10000 {{ status = "disabled"; }};
 		soundwire@7630000 {{ status = "disabled"; }};
+		spmi@c400000 {{
+			pmic@0 {{
+				pon@1300 {{
+					pwrkey {{
+						status = "okay";
+					}};
+					resin {{
+						linux,code = <114>;
+						status = "okay";
+					}};
+				}};
+			}};
+		}};
 		isp@ac04000 {{ status = "disabled"; }};
 		video-codec@aa00000 {{ status = "disabled"; }};
 		pinctrl@7760000 {{ status = "disabled"; }};
