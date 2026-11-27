@@ -66,6 +66,18 @@ docker run --rm -v "$PWD:/workspace" -w /workspace sunuefi-builder bash -euc '
 
 原理见[合体 BOOT](boot/combined-boot.md)。
 
+## miro 音频拓扑
+
+在 Linux 主机安装 `m4` 和 `alsatplg`（Debian 的 `alsa-utils` 包），准备包含 `audioreach/audioreach.m4` 的 [AudioReach 模板目录](../../THIRD_PARTY.md#miro-音频)，然后运行：
+
+```sh
+./build.sh miro-audio --topology-source /path/to/audioreach-topology
+```
+
+源码是 `linux/bsp/topology/miro.m4`，默认输出 `build/miro-audio/Xiaomi Redmi K80 Pro-tplg.bin`。可用 `--output /path/to/file.bin` 更改输出位置。命令只构建拓扑；手机使用的固件路径为 `/lib/firmware/qcom/sm8750/Xiaomi Redmi K80 Pro-tplg.bin`，对应 UCM2 配置在 `linux/bsp/common/usr/share/alsa/ucm2/Qualcomm/sm8750/Xiaomi-Redmi-K80-Pro/`。
+
+下面的多发行版完整系统流程沿用 Piano 构建配置，不能直接作为 miro 安装步骤。
+
 ## 完整系统
 
 各目标共用同一份内核和 UEFI，各自构建根系统：

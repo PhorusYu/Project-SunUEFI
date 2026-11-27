@@ -1,6 +1,6 @@
 # SunUEFI-miro
 
-Standalone UEFI firmware and native Linux (Debian Sid / GNOME) dual-boot project for the **Redmi K80 Pro (`miro`, Qualcomm Snapdragon 8 Elite / SM8750)**, independently maintained from [slwyts/Project-SunUEFI](https://github.com/slwyts/Project-SunUEFI) with unrelated device targets removed.
+Standalone UEFI firmware and native Linux (Debian Sid / GNOME) dual-boot project for the **Redmi K80 Pro (`miro`, Qualcomm Snapdragon 8 Elite / SM8750)**. Source code and issue tracking are maintained independently at [PhorusYu/SunUEFI-miro](https://github.com/PhorusYu/SunUEFI-miro). See the acknowledgements below for its origins.
 
 [简体中文](README.md)
 

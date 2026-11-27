@@ -1,6 +1,7 @@
 Project SunUEFI Linux patch directory
 
-Project SunUEFI contributions throughout patches/linux/ are licensed under the
+Project SunUEFI contributions throughout patches/linux/ and tools/patches/ are
+licensed under the
 GNU General Public License, version 2 or, at your option, any later version
 published by the Free Software Foundation (GPL-2.0-or-later). Where specific
 license terms apply, those terms govern the relevant material. Material taken
@@ -10,6 +11,7 @@ copyright notices, and authorship attribution.
 Project SunUEFI contributors to this directory
 
   Cryolitia PukNgae
+  PhorusYu
   directorhorse
   SakiMidare
   slwyts

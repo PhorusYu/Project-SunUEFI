@@ -1,6 +1,8 @@
 # 文档
 
-[项目首页](../README.md)介绍项目和快速开始，[项目状态](status.md)列出每个功能现在能做什么。
+[项目首页](../README.md)和[项目状态](status.md)介绍 SunUEFI-miro 的使用范围与实机结果。[构建手册](devel/building.md#miro-音频拓扑)包含 miro 音频构建命令。
+
+下面保留的安装与实现文档来自 Project-SunUEFI，涉及 Piano、触控笔或多发行版的步骤仅适用于相应目标。miro 的硬件支持和构建入口以项目首页为准。
 
 ## 我想用
 
@@ -37,7 +39,7 @@
 | 目录 | 内容 |
 | --- | --- |
 | [`devel/boot/`](devel/boot/combined-boot.md) | 合体 BOOT、Android 模块、启动请求、UEFI 控制台和显示 |
-| [`devel/hardware/`](devel/hardware/pen-protocol.md) | 显示、音频、相机、传感器、触控笔、电源等硬件的实现 |
+| [`devel/hardware/`](devel/hardware/) | 显示、音频、相机、传感器、触控笔、电源等硬件的实现 |
 | [`devel/linux/`](devel/linux/kernel.md) | 内核配置、系统服务、SteamOS |
 
 发行版配方在 [BSP 配置包](../linux/bsp/README.md)、[根系统装配](../linux/rootfs/README.md)和[桌面配置](../linux/desktops/README.md)。第三方来源见 [THIRD_PARTY.md](../THIRD_PARTY.md)。

@@ -1,6 +1,6 @@
 # SunUEFI-miro
 
-专为 **Redmi K80 Pro（代号 `miro`，高通骁龙 8 至尊版 SM8750）** 打造的独立 UEFI 固件与原生 Linux（Debian Sid / GNOME）双系统项目，基于 [slwyts/Project-SunUEFI](https://github.com/slwyts/Project-SunUEFI) 分支独立演化并移除其他机型代码。
+专为 **Redmi K80 Pro（代号 `miro`，高通骁龙 8 至尊版 SM8750）** 打造的独立 UEFI 固件与原生 Linux（Debian Sid / GNOME）双系统项目。源码与问题反馈位于 [PhorusYu/SunUEFI-miro](https://github.com/PhorusYu/SunUEFI-miro)，历史来源见下方致谢。
 
 [English](README.en.md)
 
@@ -43,5 +43,5 @@ android/                  Android 引导助手模块（WebUI + piano-boot-repack
 
 ## 致谢与许可证
 
-- 感谢 [slwyts/Project-SunUEFI](https://github.com/slwyts/Project-SunUEFI) 提供 SM8750 UEFI 底层、合体 BOOT（`SUNUEFI-SPLITv1`）、无损存储分区工具与基础基础设施。
+- 感谢 [slwyts/Project-SunUEFI](https://github.com/slwyts/Project-SunUEFI) 提供 SM8750 UEFI 底层、合体 BOOT（`SUNUEFI-SPLITv1`）、无损存储分区工具与基础设施。
 - 许可证范围与第三方声明见 [LICENSE.md](LICENSE.md) 与 [THIRD_PARTY.md](THIRD_PARTY.md)。

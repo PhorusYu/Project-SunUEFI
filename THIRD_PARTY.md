@@ -8,7 +8,7 @@ SunUEFI 站在这些项目之上：EDK2 / Mu-Silicium 提供 UEFI 基础和高�
 
 | 组件 | 来源与固定身份 | 本仓库使用方式 / 工具 | 许可核对位置与当前范围 |
 | --- | --- | --- | --- |
-| Mu-Silicium | [Project-Silicium/Mu-Silicium](https://github.com/Project-Silicium/Mu-Silicium)，`3ec9169f308c01030a7e698072aca5acb2c0a144` | [prepare_piano.py](tools/dev/prepare_piano.py) 派生 OnePlus 模板；[build_stage0.sh](tools/build_stage0.sh) 编译 | 上游许可与文件声明；[DeviceBuild.py](uefi/platforms/pianoPkg/DeviceBuild.py) 保留 Microsoft 版权/BSD-2-Clause-Patent。 |
+| Mu-Silicium | [Project-Silicium/Mu-Silicium](https://github.com/Project-Silicium/Mu-Silicium)，`3ec9169f308c01030a7e698072aca5acb2c0a144` | [prepare_piano.py](tools/dev/prepare_piano.py) 派生 OnePlus 模板；[build_stage0.sh](tools/build_stage0.sh) 编译 | 上游许可与文件声明；[DeviceBuild.py](uefi/platforms/miroPkg/DeviceBuild.py) 保留 Microsoft 版权/BSD-2-Clause-Patent。 |
 | mu_wide_platforms（移植参考） | [sunflower2333/mu_wide_platforms](https://github.com/sunflower2333/mu_wide_platforms)，查阅提交 `3e1d052064beb6e59cda3cfba87d50e6cc088174` 的 [Piano 平台](https://github.com/sunflower2333/mu_wide_platforms/tree/3e1d052064beb6e59cda3cfba87d50e6cc088174/Platforms/PakalaPkg/Device/xiaomi-piano) | 同机 Project Mu UEFI、平台初始化与 ACPI 的参考资料；现有构建依赖见上方 Mu-Silicium 条目 | 仓库标注 BSD-2-Clause；具体源码及附带二进制按各自声明处理。 |
 | Mu_Basecore、Mu Plus、Mu OEM Sample、Silicium-ACPI、Device-Binaries | URL/commit 见 [sources.lock.json](sources.lock.json) | Mu 构建树及 [product hooks](tools/prepare_product_pump.py) | 各来源的许可/版权；Device-Binaries 还需按二进制材料核对。 |
 | dtc | [dgibson/dtc](https://github.com/dgibson/dtc)，`f3451d12532b9d382707c458a2ae2e5aa0e1eee4` | `upstream/dtc`、DTB 工具 | 上游固定提交的许可和文件声明。 |
@@ -17,13 +17,13 @@ SunUEFI 站在这些项目之上：EDK2 / Mu-Silicium 提供 UEFI 基础和高�
 | f2fs-tools | 官方 1.17.0，来源与保留布局扩容补丁见 [series.json](patches/f2fs-tools/1.17.0/series.json) | Android 模块内静态 `fsck.f2fs`／`resize.f2fs`，由 [build_f2fs_tools.py](tools/android/build_f2fs_tools.py) 构建 | GPL-2.0；模块附带 COPYING、源码来源和本地补丁。 |
 | Linux / linux-piano | [blu-sharky/linux-piano](https://github.com/blu-sharky/linux-piano)、[torvalds/linux](https://github.com/torvalds/linux)；救援 pin 见 [kernel-profiles.json](linux/kernel-profiles.json) | [build_kernel.py](tools/build_kernel.py)；完整基线见 [full builder](tools/build_piano_full_kernel.py) / [next builder](tools/build_piano_next_full.py) | 选定内核的 `COPYING`、`LICENSES/` 和文件声明；不改变主机脚本的许可。 |
 | BigfootACA 高通显示补丁（Junhao Xie） | [PLL 初始化 `67b3cbd4bab5`](https://github.com/BigfootACA/linux/commit/67b3cbd4bab5687c3aa3c9fe5a14c37433e28bbf)、[DPU 停止顺序 `8f353c130fee`](https://github.com/BigfootACA/linux/commit/8f353c130fee0fcf09afbe10e7fc58f901931418)、[PHY 运行时接口时钟 `b95037aef0a0`](https://github.com/BigfootACA/linux/commit/b95037aef0a0bf5cd612e7517a67644887e9fd5d) | 用于修正 PLL 初始化、视频流水线停止顺序和 PHY 接口时钟的运行时管理 | 保留原作者与 Signed-off-by；沿用相应 Linux 源文件的 SPDX 和内核许可。PHY 补丁仅调整本地已有恢复辅助代码附近的上下文。 |
-| MiCode 板级资料 / 公开内核 | [MiCode/Xiaomi_Kernel_OpenSource](https://github.com/MiCode/Xiaomi_Kernel_OpenSource)，`45fb9bd6ae5ba2942fc1d53e4b6b46ef76992f71`；DTS pin 见 [来源集](docs/archive/linux-bringup/piano-full-linux-candidate.md) | [PianoKeys.c](uefi/core/PianoKeys.c) 等注明参考来源 | 原声明保留；本地 Keys 为 GPL-2.0-only，TouchProbe 为 GPL-2.0-or-later。 |
-| Debian/Piano 用户态、Mesa、固件 | 组件/精确 commit 见 [Linux 来源集](docs/archive/linux-bringup/piano-full-linux-candidate.md) | [stage_piano_full_userspace.py](tools/stage_piano_full_userspace.py) 等暂存到派生根系统 | 包、服务源码、Mesa 与固件按各自通知处理。 |
+| MiCode 板级资料 / 公开内核 | [MiCode/Xiaomi_Kernel_OpenSource](https://github.com/MiCode/Xiaomi_Kernel_OpenSource)，`45fb9bd6ae5ba2942fc1d53e4b6b46ef76992f71`；DTS 参考该提交中的 `piano-w-oss` 板级资料；miro 的设备树由 [生成工具](tools/build_miro_ram_boot.py) 维护 | [PianoKeys.c](uefi/core/input/PianoKeys.c) 等注明参考来源 | 原声明保留；本地 Keys 为 GPL-2.0-only，TouchProbe 为 GPL-2.0-or-later。 |
+| Debian/Piano 用户态、Mesa、固件 | 组件与固定身份见 [sources.lock.json](sources.lock.json) 及对应 `config/` 清单 | [stage_piano_full_userspace.py](tools/stage_piano_full_userspace.py) 等暂存到派生根系统 | 包、服务源码、Mesa 与固件按各自通知处理。 |
 | libcamera | [发布源码与 Debian 配方](config/libcamera.json)、[Hans de Goede 的 CAMSS 系列与本地 PIX 补丁](patches/libcamera/0.8.0/series.json) | `./build.sh libcamera` 生成 Debian ARM64 原生包 | 核心和 CAMSS 为 LGPL-2.1-or-later；工具、IPA 等按上游 [COPYING.rst](https://github.com/libcamera-org/libcamera/blob/v0.8.0/COPYING.rst) 和各文件声明，Debian 包保留版权清单。 |
 | Denial | [发布标签与源码](config/denial.json)、[本地旋转补丁](patches/denial/0.6.8/series.json) | `./build.sh denial` 构建合成器和原生包；Arch 同批发布签名核对过的原版 Flutter Engine 归档，不改包内文件 | Denial 源码按上游 [LICENSE](https://github.com/denialwm/denial/blob/v0.6.8/LICENSE) 的 GPL-3.0-or-later；Engine 的源码锁定记录和许可留在原包。 |
 | xiaomi-sheng-thp 笔解算 | [ianchb/xiaomi-sheng-thp](https://github.com/ianchb/xiaomi-sheng-thp)，`34046210932d654a4c0df0121ecc31c008f8148c` | [Piano 参数化核心](linux/userspace/pen/piano-pen-core.h) 从独立矩阵解算与滤波代码派生，读取本机实际校准配置；不启动上游的第二个触控服务 | Apache-2.0；保留 [完整许可证](linux/userspace/pen/Apache-2.0.txt)、源文件 SPDX 和 [来源／修改说明](linux/userspace/pen/OPEN_CORE_ORIGIN.txt)。当前仅完成真实配置和压力报告处理，坐标仍需实际笔矩阵验证。 |
 
-`sources.lock.json` 只覆盖部分依赖，其他 pin 仍在脚本中。内核 linked-worktree 获取方式见 [内核复现说明](docs/archive/linux-bringup/linux-reproducible-builds.md)。
+`sources.lock.json` 只覆盖部分依赖，其他 pin 仍在脚本中。内核构建方式见 [构建手册](docs/devel/building.md)和[内核配置](docs/devel/linux/kernel.md)。
 
 小米平板相关参考还包括 [code002-2/Xiaomi-pad-6s-pro-Linux](https://github.com/code002-2/Xiaomi-pad-6s-pro-Linux/tree/053169b1ed48335d8139694ea6ccaacf52462dd9) 及其引用的 [debian-sheng](https://github.com/ianchb/debian-sheng)、[xiaomi-mipps-auth](https://github.com/ianchb/xiaomi-mipps-auth/tree/9176efbdf276b874fc0a97912a914449a88155fb) 和 [xiaomi-sheng-fingerprint](https://github.com/ianchb/xiaomi-sheng-fingerprint/tree/76e7301163b0e708f609c9864b3e5833e9f57402)。分别用于多发行版集成、MiPPS 认证和标准 libfprint/fprintd 接入的参考。指纹项目使用 FPC1553，Piano 原厂使用 Goodix，不能直接互换传感器协议。MiPPS 工具标注 GPL-2.0-only；指纹后端为 Apache-2.0，libfprint/fprintd 补丁及 QTEE 依赖遵循各自许可。
 
@@ -105,6 +105,16 @@ SteamOS Manager 使用 [Valve 26.4.1 源码](https://gitlab.steamos.cloud/holo/s
 版权和源码提供方式，不改变为本仓库许可。下载身份、摘要及关键源提交固定在
 `config/steam-runtime.json`；构建直接提取公开工具包，不复制用户的 Steam 账户数据。
 
+## miro 音频
+
+| 组件 | 来源 | 许可与本地使用 |
+| --- | --- | --- |
+| TFA9865 驱动与绑定 | Venkat Yadlapati / NXP；[驱动提交](https://git.kernel.org/broonie/sound/c/ba47599b523e91bb31f56472eb36e7801d3f45a7)、[绑定提交](https://git.kernel.org/broonie/sound/c/3bb77766ce46c2af10feba498340db8be55ce91e) | 驱动为 GPL-2.0-only，绑定为 GPL-2.0-only OR BSD-2-Clause。原作者、版权和人类签署保留在 `tools/patches/0001-*`、`0002-*`；miro 修订版、接线及接收采样沿适配在 `0301-*`。 |
+| AudioReach PCM 格式 | [S24 容器修复](https://git.kernel.org/broonie/sound/c/feb416ba626e95b12fc238587f8fee93cae66c9c)、[S32 支持邮件](https://lore.kernel.org/linux-sound/20261122161437.5994-12-srinivas.kandagatla@oss.qualcomm.com/) | 回移至 `tools/patches/0003-*`、`0100-*`，保留 Linux 原有文件许可、作者和签署。 |
+| AudioReach 拓扑模板 | [linux-msm/audioreach-topology](https://github.com/linux-msm/audioreach-topology/tree/31eaaac08da364cb346681b132129028b9c583f4) | 实测使用该提交的 BSD-3-Clause 模板；模板本身不复制进仓库。[miro.m4](linux/bsp/topology/miro.m4) 和[构建工具](tools/build/miro_audio.py) 标明 BSD-3-Clause；[完整许可](linux/bsp/topology/LICENSE.BSD-3-Clause)保留模板来源的通知。 |
+
+功放修订识别、trim 和麦克风路由还对照了同机 Android 的 `tfa98xx_dlkm.ko`、`tfa98xx.cnt` 及音频 XML。它们是本地分析输入，不随这些源码补丁分发。麦克风路由修复和板级声卡配置位于 `tools/patches/0302-*`、`0303-*`；UCM2 板级配置位于 `linux/bsp/common/usr/share/alsa/ucm2/Qualcomm/sm8750/Xiaomi-Redmi-K80-Pro/`。
+
 ## 字体、图标与显示资源
 
 | 资源 | 身份与使用 | 通知 / 尚需核对 |
@@ -112,7 +122,7 @@ SteamOS Manager 使用 [Valve 26.4.1 源码](https://gitlab.steamos.cloud/holo/s
 | Noto CJK | [prepare_simpleinit.py](tools/prepare_simpleinit.py) 提取主机字体的 SC 字面；主机包版本未锁定 | 实际 hash 写入 `source-manifest.json`；字体许可/通知来自取得包。 |
 | Noto Sans CJK SC 设置页字形 | [prepare_product_console.py](tools/prepare_product_console.py) 从 SC 字面生成 16×19 位图，以标准 HII 字体包提供中文 | SIL OFL 1.1；[完整通知](uefi/components/product-support/Library/ConsoleScale/OFL.txt) 随模块和安装包附带，字体与生成数据的 hash 记入产品构建清单。 |
 | Font Awesome | 同一脚本下载 `FortAwesome/Font-Awesome` `5.15.4` 字体 | 记录实际 hash，下载前未锁内容 hash；核对该版本字体通知。 |
-| AOSP bitmap font | [Font.h](uefi/platforms/pianoProbePkg/Library/RamLogSerialPortLib/Font.h) | 文件头已保存 AOSP 版权及源码/二进制分发条款；发布时保留适用通知。 |
+| AOSP bitmap font（开发工具） | [Mu-Silicium](upstream/Mu-Silicium) 中的 `Silicon/Silicium/SiliciumPkg/Library/FrameBufferSerialPortLib/Font.h`；由 [prepare_handoff_probe.py](tools/dev/prepare_handoff_probe.py) 复制至探测构建目录 | 保留源文件的 AOSP 版权和分发条款。产品准备器会移除 RamLog 探测库，此条不表示 miro 成品包含该字体。 |
 | TianoCore 标志与品牌文字 | [ProductSplashAssets.h](uefi/components/product-support/Library/ProductBootManagerLib/ProductSplashAssets.h) 描述为六辐标志的向量解释 | 保留来源说明，品牌使用范围另核对。 |
 
 `build_simpleinit.sh` 会把字体所在 rootfs 生成链接对象，因此它们可能进入二进制，通知核对不能只限于 Git 中的源码文件。
