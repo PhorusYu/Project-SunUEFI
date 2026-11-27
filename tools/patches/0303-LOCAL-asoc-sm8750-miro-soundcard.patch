@@ -1,0 +1,75 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PhorusYu <PhorusYu@users.noreply.github.com>
+Date: Fri, 27 Nov 2026 20:56:40 +0800
+Subject: [PATCH] ASoC: qcom: sc8280xp: configure Redmi K80 Pro stereo speaker
+ playback
+
+Provide the two physical speaker endpoints and the two-channel S32_LE
+backend with I2S framing. Select the receive clock edge required by the
+TFA9865 amplifiers while retaining the WCD9395 headset jack support.
+
+The speaker DAI uses 48 kHz, two 32-bit slots and the secondary LPASS
+interface. Tested with the miro AudioReach topology and both amplifiers.
+Signed-off-by: PhorusYu <PhorusYu@users.noreply.github.com>
+---
+ sound/soc/qcom/sc8280xp.c | 30 ++++++++++++++++++++++++++++++
+ 1 file changed, 30 insertions(+)
+
+diff --git a/sound/soc/qcom/sc8280xp.c b/sound/soc/qcom/sc8280xp.c
+index 7acc303d4..1c3d69770 100644
+--- a/sound/soc/qcom/sc8280xp.c
++++ b/sound/soc/qcom/sc8280xp.c
+@@ -39,6 +39,21 @@ static struct snd_soc_dapm_widget sc8280xp_dapm_widgets[] = {
+ 	SND_SOC_DAPM_SPK("DP7 Jack", NULL),
+ };
+ 
++static struct snd_soc_dapm_widget xiaomi_miro_dapm_widgets[] = {
++	SND_SOC_DAPM_HP("Headphone Jack", NULL),
++	SND_SOC_DAPM_MIC("Mic Jack", NULL),
++	SND_SOC_DAPM_SPK("DP0 Jack", NULL),
++	SND_SOC_DAPM_SPK("DP1 Jack", NULL),
++	SND_SOC_DAPM_SPK("DP2 Jack", NULL),
++	SND_SOC_DAPM_SPK("DP3 Jack", NULL),
++	SND_SOC_DAPM_SPK("DP4 Jack", NULL),
++	SND_SOC_DAPM_SPK("DP5 Jack", NULL),
++	SND_SOC_DAPM_SPK("DP6 Jack", NULL),
++	SND_SOC_DAPM_SPK("DP7 Jack", NULL),
++	SND_SOC_DAPM_SPK("Speaker Left", NULL),
++	SND_SOC_DAPM_SPK("Speaker Right", NULL),
++};
++
+ static const struct snd_kcontrol_new max98090_controls[] = {
+ 	SOC_DAPM_PIN_SWITCH("Headset Mic12"),
+ 	SOC_DAPM_PIN_SWITCH("Headphone"),
+@@ -604,6 +619,20 @@ static const struct qcom_snd_soc_common sm8750_priv_data = {
+ 	.wcd_jack = true,
+ };
+ 
++static const struct qcom_snd_soc_common xiaomi_miro_priv_data = {
++	.driver_name = "sm8750",
++	.dapm_widgets = xiaomi_miro_dapm_widgets,
++	.num_dapm_widgets = ARRAY_SIZE(xiaomi_miro_dapm_widgets),
++	.wcd_jack = true,
++	.mi2s_bclk_enable = true,
++	.codec_sysclk_set = true,
++	.codec_dai_fmt = SND_SOC_DAIFMT_BC_FC |
++			 SND_SOC_DAIFMT_IB_NF |
++			 SND_SOC_DAIFMT_I2S,
++	.tdm_channels = 2,
++	.tdm_format = SNDRV_PCM_FORMAT_S32_LE,
++};
++
+ static const struct qcom_snd_soc_common xiaomi_piano_priv_data = {
+ 	.driver_name = "sm8750",
+ 	.dapm_widgets = sc8280xp_dapm_widgets,
+@@ -637,6 +666,7 @@ static const struct of_device_id snd_sc8280xp_dt_match[] = {
+ 	{ .compatible = "qcom,sm8550-sndcard", .data = &sm8550_priv_data },
+ 	{ .compatible = "qcom,sm8650-sndcard", .data = &sm8650_priv_data },
+ 	{ .compatible = "qcom,sm8750-sndcard", .data = &sm8750_priv_data },
++	{ .compatible = "xiaomi,miro-sndcard", .data = &xiaomi_miro_priv_data },
+ 	{ .compatible = "xiaomi,piano-sndcard", .data = &xiaomi_piano_priv_data },
+ 	{}
+ };
+-- 
+2.53.0
+

@@ -291,9 +291,7 @@ def build_miro_dtb(src_dtb: Path, out_dtb: Path, work_dir: Path) -> None:
 			}};
 		}};
 		soundwire@6ab0000 {{ status = "disabled"; }};
-		soundwire@6ad0000 {{ status = "disabled"; }};
 		soundwire@6b10000 {{ status = "disabled"; }};
-		soundwire@7630000 {{ status = "disabled"; }};
 		spmi@c400000 {{
 			pmic@0 {{
 				pon@1300 {{
@@ -309,8 +307,154 @@ def build_miro_dtb(src_dtb: Path, out_dtb: Path, work_dir: Path) -> None:
 		}};
 		isp@ac04000 {{ status = "disabled"; }};
 		video-codec@aa00000 {{ status = "disabled"; }};
-		pinctrl@7760000 {{ status = "disabled"; }};
 		mmc@8804000 {{ status = "disabled"; }};
+		codec@7660000 {{
+			pinctrl-0 = <0x7f01 0x7f02>;
+			pinctrl-names = "default";
+		}};
+		pinctrl@7760000 {{
+			dmic01-default-state {{
+				phandle = <0x7f01>;
+			}};
+			dmic23-default-state {{
+				phandle = <0x7f02>;
+			}};
+		}};
+		geniqup@9c0000 {{
+			status = "okay";
+			i2c@980000 {{
+				status = "okay";
+				#address-cells = <1>;
+				#size-cells = <0>;
+				amplifier@34 {{
+					compatible = "nxp,tfa9865";
+					reg = <0x34>;
+					sound-name-prefix = "Speaker Left";
+					reset-gpios = <{tlmm_ph} 108 1>;
+					spk-sw-gpios = <{tlmm_ph} 67 0>;
+					nxp,slot = <0>;
+					#sound-dai-cells = <0>;
+					phandle = <0x7f04>;
+				}};
+				amplifier@35 {{
+					compatible = "nxp,tfa9865";
+					reg = <0x35>;
+					sound-name-prefix = "Speaker Right";
+					reset-gpios = <{tlmm_ph} 107 1>;
+					nxp,slot = <1>;
+					#sound-dai-cells = <0>;
+					phandle = <0x7f05>;
+				}};
+			}};
+		}};
+		pinctrl@f100000 {{
+			sec-tdm-active-state {{
+				phandle = <0x7f03>;
+				sck-pins {{
+					pins = "gpio121";
+					function = "i2s1_sck";
+					drive-strength = <8>;
+					bias-disable;
+				}};
+				ws-pins {{
+					pins = "gpio123";
+					function = "i2s1_ws";
+					drive-strength = <6>;
+					bias-disable;
+				}};
+				data0-pins {{
+					pins = "gpio122";
+					function = "i2s1_data0";
+					drive-strength = <8>;
+					bias-disable;
+				}};
+				data1-pins {{
+					pins = "gpio124";
+					function = "i2s1_data1";
+					drive-strength = <8>;
+					bias-pull-down;
+				}};
+			}};
+		}};
+		remoteproc@6800000 {{
+			glink-edge {{
+				gpr {{
+					service@1 {{
+						bedais {{
+							#address-cells = <1>;
+							#size-cells = <0>;
+							dai@28 {{
+								reg = <0x28>;
+								clocks = <0x94 37 1>;
+								clock-names = "bclk";
+							}};
+						}};
+					}};
+				}};
+			}};
+		}};
+	}};
+	audio-codec {{
+		qcom,micbias1-microvolt = <2750000>;
+		qcom,micbias2-microvolt = <2750000>;
+		qcom,micbias3-microvolt = <2750000>;
+		qcom,micbias4-microvolt = <2750000>;
+	}};
+	sound {{
+		compatible = "xiaomi,miro-sndcard", "qcom,sm8750-sndcard";
+		model = "Xiaomi Redmi K80 Pro";
+		pinctrl-0 = <0x7f03>;
+		pinctrl-names = "default";
+		audio-routing =
+			"IN1_HPHL", "HPHL_OUT",
+			"IN2_HPHR", "HPHR_OUT",
+			"AMIC1", "Analog Mic1",
+			"AMIC1", "MIC BIAS1",
+			"AMIC2", "Analog Mic2",
+			"AMIC2", "MIC BIAS2",
+			"AMIC3", "Analog Mic3",
+			"AMIC3", "MIC BIAS4",
+			"AMIC4", "Analog Mic4",
+			"AMIC4", "MIC BIAS4",
+			"AMIC5", "Analog Mic5",
+			"AMIC5", "MIC BIAS3",
+
+			"TX SWR_INPUT0", "ADC1_OUTPUT",
+			"TX SWR_INPUT1", "ADC2_OUTPUT",
+			"TX SWR_INPUT2", "ADC3_OUTPUT",
+			"TX SWR_INPUT3", "ADC4_OUTPUT",
+
+			"VA DMIC0", "MIC BIAS3",
+			"VA DMIC1", "MIC BIAS3",
+			"VA DMIC2", "MIC BIAS1",
+			"VA DMIC3", "MIC BIAS1",
+			"VA DMIC0", "VA MIC BIAS3",
+			"VA DMIC1", "VA MIC BIAS3",
+			"VA DMIC2", "VA MIC BIAS1",
+			"VA DMIC3", "VA MIC BIAS1",
+			"Speaker Left", "Speaker Left OUT",
+			"Speaker Right", "Speaker Right OUT";
+		/delete-node/ wsa-dai-link;
+		speaker-dai-link {{
+			link-name = "Speaker Playback";
+			codec {{
+				sound-dai = <0x7f04 0x7f05>;
+				dai-tdm-slot-num = <2>;
+				dai-tdm-slot-width = <32>;
+				dai-tdm-slot-tx-mask = <1 1>;
+				dai-tdm-slot-rx-mask = <1 1>;
+			}};
+			cpu {{
+				sound-dai = <0x17b 0x28>;
+				dai-tdm-slot-num = <2>;
+				dai-tdm-slot-width = <32>;
+				dai-tdm-slot-tx-mask = <1 1>;
+				dai-tdm-slot-rx-mask = <1 1>;
+			}};
+			platform {{
+				sound-dai = <0x17c>;
+			}};
+		}};
 	}};
 }};
 """

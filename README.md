@@ -13,6 +13,7 @@
 - **物理按键**：电源键（`pmic_pwrkey`）、音量下键（`pmic_resin`）、音量上键（`gpio-keys` / `pm8550-gpio 6`）。
 - **Adreno 830 GPU**：加载 `gen80000_zap.mbn` + GMU `v5.1.25`，搭配 Mesa 27（Freedreno OpenGL 4.6 / Turnip Vulkan 1.4），Wayland GNOME 与 Firefox WebGL 硬件加速正常。
 - **Wi-Fi 7、蓝牙与 USB NCM**：WCN7861 Wi-Fi 7（`ath12k` `peach hw2.0` + AOSS PDC 投票，支持固定原厂 MAC）、WCN7861 蓝牙（`qcom,wcn7861-bt` + `miro-bt-setup.service`）与 USB NCM（`eusb2-repeater` + `udhcpd`）可用。
+- **内置扬声器与麦克风**：TFA9865 双扬声器左右声道播放、WCD9395 内置双麦录音及 USB-C 耳机播放正常；通过 ALSA UCM2 / PipeWire 在 GNOME 中使用。蓝牙 UART 使用 3.2 Mbps，保留 A2DP 播放。
 - **电池电量与安全 5V 充电**：`bq27z561-0` 独立电量计 + `miro-adsp.service`（ADSP `charger_pd`）+ `miro_mca` 安全 5V 普通充电控制（支持 SDP/CDP/DCP/PD 限流、`4400 mV` 恒压、温度/电压保护及 `charge_behaviour`）。
 - **无损双系统分区**：基于 `piano-resize-f2fs` 与 `piano-storage` 无损收缩 `userdata`，建立 `sunuefi_esp`（512 MiB）与 `sunuefi_root`（`LABEL=PIANOROOT`）。
 
@@ -33,7 +34,10 @@ android/                  Android 引导助手模块（WebUI + piano-boot-repack
 # 1. 构建 MiroUEFI 产品镜像
 ./build.sh uefi --target miro
 
-# 2. 构建 miro Android 引导助手模块 ZIP
+# 2. 构建 miro 音频拓扑（使用 linux-msm/audioreach-topology 模板）
+./build.sh miro-audio --topology-source /path/to/audioreach-topology
+
+# 3. 构建 miro Android 引导助手模块 ZIP
 ./build.sh module --product artifacts/product
 ```
 

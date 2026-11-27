@@ -53,6 +53,7 @@ case "$command" in
   camera-package) python3 tools/package/camera.py "$@" ;;
   mesa) python3 tools/build/arch_mesa.py "$@" ;;
   sensors) python3 tools/build/sensors.py "$@" ;;
+  miro-audio) python3 tools/build/miro_audio.py "$@" ;;
   display-calibration) python3 tools/display/build_output_color.py "$@" ;;
   bsp)
     python3 tools/package_bsp.py "$@" ;;
@@ -85,8 +86,9 @@ case "$command" in
   install) python3 tools/install_piano.py "$@" ;;
   installer) python3 tools/export_installer.py "$@" ;;
   help|-h|--help)
-    printf '%s\n' 'Usage: ./build.sh sources|check|uefi|trampoline|module|module-package|boot-request|boot-repack|linux|linux-package|camera-package|mesa|sensors|display-calibration|ffmpeg|gsd|gdm|bluez|libcamera|denial|droidloom-package|pipewire|kwin|qt-multimedia|plasma-camera|libwacom|mutter|bsp|repo|rootfs|release-rootfs|nyarch-gnome-rootfs|arch-denial-rootfs|steamos-rootfs|package|all|installer|install' \
+    printf '%s\n' 'Usage: ./build.sh sources|check|uefi|trampoline|module|module-package|boot-request|boot-repack|linux|linux-package|camera-package|mesa|sensors|miro-audio|display-calibration|ffmpeg|gsd|gdm|bluez|libcamera|denial|droidloom-package|pipewire|kwin|qt-multimedia|plasma-camera|libwacom|mutter|bsp|repo|rootfs|release-rootfs|nyarch-gnome-rootfs|arch-denial-rootfs|steamos-rootfs|package|all|installer|install' \
       'Full builds need the documented builder environment; rootfs/Mesa/sensors run in a root ARM64 build container.' \
+      'miro-audio requires --topology-source pointing to local AudioReach templates.' \
       'release-rootfs reads its kernel source worktree from build/release/source-manifest.json.' \
       'Building never partitions or flashes a tablet. install is a separate explicit command.' ;;
   *) printf 'Unknown command: %s\n' "$command" >&2; exit 2 ;;

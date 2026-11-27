@@ -13,6 +13,7 @@ Standalone UEFI firmware and native Linux (Debian Sid / GNOME) dual-boot project
 - **Hardware Keys**: Power (`pmic_pwrkey`), Volume Down (`pmic_resin`), and Volume Up (`gpio-keys` / `pm8550-gpio 6`).
 - **Adreno 830 GPU**: `gen80000_zap.mbn` + GMU `v5.1.25` with Mesa 27 (Freedreno OpenGL 4.6 / Turnip Vulkan 1.4) driving GNOME Wayland and Firefox WebGL.
 - **Wi-Fi 7, Bluetooth & USB NCM**: WCN7861 Wi-Fi 7 (`ath12k` `peach hw2.0` via AOSS PDC votes), WCN7861 Bluetooth (`qcom,wcn7861-bt` + `miro-bt-setup.service`), and USB NCM (`eusb2-repeater` + `udhcpd`).
+- **Speakers and microphones**: TFA9865 stereo speaker playback, WCD9395 internal dual-microphone recording, and USB-C headset playback work through ALSA UCM2 / PipeWire in GNOME. Bluetooth retains A2DP playback with a 3.2 Mbps UART.
 - **Battery & Safe 5V Charging**: `bq27z561-0` fuel gauge + `miro-adsp.service` + `miro_mca` safe 5V charging control (SDP/CDP/DCP/PD current limits, `4400 mV` float voltage, thermal/voltage guards, and `charge_behaviour`).
 - **Lossless UFS Partitioning**: Online `userdata` shrink via `piano-resize-f2fs` and `piano-storage` creating `sunuefi_esp` and `sunuefi_root` (`LABEL=PIANOROOT`).
 
@@ -22,7 +23,10 @@ Standalone UEFI firmware and native Linux (Debian Sid / GNOME) dual-boot project
 # 1. Build MiroUEFI product image
 ./build.sh uefi --target miro
 
-# 2. Build Android boot helper module ZIP for miro
+# 2. Build the miro audio topology using linux-msm/audioreach-topology templates
+./build.sh miro-audio --topology-source /path/to/audioreach-topology
+
+# 3. Build Android boot helper module ZIP for miro
 ./build.sh module --product artifacts/product
 ```
 

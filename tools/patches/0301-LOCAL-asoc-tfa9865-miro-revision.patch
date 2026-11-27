@@ -1,0 +1,371 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PhorusYu <PhorusYu@users.noreply.github.com>
+Date: Fri, 27 Nov 2026 20:56:40 +0800
+Subject: [PATCH] ASoC: tfa9865: support the Redmi K80 Pro amplifier revision
+ and wiring
+
+Decode the device-info and OTP revision before selecting the N2A3
+initialization table used by miro. Reject unknown revisions instead of
+applying an unrelated amplifier trim table. Retain the upstream B0 path.
+
+Support the board receiver selector and stereo slot selection, and
+program I2S receive clock inversion through set_fmt. The board requires
+the inverted receive edge; acoustic sine tests otherwise produce strong
+second harmonics. The receiver selector stays low for speaker playback.
+
+The revision sequence was checked against the stock tfa98xx module and
+NXP's tfa986x initialization and field definitions. Tested with two
+amplifiers, 48 kHz S32_LE playback and a full kernel build.
+Signed-off-by: PhorusYu <PhorusYu@users.noreply.github.com>
+---
+ .../bindings/sound/nxp,tfa9865.yaml           |  16 ++
+ sound/soc/codecs/Kconfig                      |  16 +-
+ sound/soc/codecs/Makefile                     |   4 +-
+ sound/soc/codecs/tfa9865.c                    | 151 +++++++++++++++++-
+ 4 files changed, 170 insertions(+), 17 deletions(-)
+
+diff --git a/Documentation/devicetree/bindings/sound/nxp,tfa9865.yaml b/Documentation/devicetree/bindings/sound/nxp,tfa9865.yaml
+index ff8fd35d9..93b5d2f07 100644
+--- a/Documentation/devicetree/bindings/sound/nxp,tfa9865.yaml
++++ b/Documentation/devicetree/bindings/sound/nxp,tfa9865.yaml
+@@ -30,6 +30,22 @@ properties:
+   reset-gpios:
+     maxItems: 1
+ 
++  spk-sw-gpios:
++    maxItems: 1
++    description:
++      Receiver path selector. Asserted selects the handset receiver path;
++      deasserted selects the speaker path. This is a routing selector, not
++      an amplifier enable. The driver keeps it deasserted for playback.
++
++  nxp,slot:
++    $ref: /schemas/types.yaml#/definitions/uint32
++    enum: [0, 1]
++    default: 0
++    description:
++      Initial amplifier input slot in the two-slot I2S frame. Slot 0 is
++      the left channel and slot 1 is the right channel. The input can
++      subsequently be selected through the amplifier input control.
++
+   vddd-supply:
+     description: Digital supply (1.8 V)
+ 
+diff --git a/sound/soc/codecs/Kconfig b/sound/soc/codecs/Kconfig
+index db726dea1..ff5b3a795 100644
+--- a/sound/soc/codecs/Kconfig
++++ b/sound/soc/codecs/Kconfig
+@@ -282,8 +282,8 @@ config SND_SOC_ALL_CODECS
+ 	imply SND_SOC_TAS6424
+ 	imply SND_SOC_TAS675X
+ 	imply SND_SOC_TDA7419
+-	imply SND_SOC_TFA9865
+ 	imply SND_SOC_TFA9879
++	imply SND_SOC_TFA9865
+ 	imply SND_SOC_TFA989X
+ 	imply SND_SOC_TLV320ADC3XXX
+ 	imply SND_SOC_TLV320ADCX140
+@@ -2307,23 +2307,23 @@ config SND_SOC_TDA7419
+ 	depends on I2C
+ 	select REGMAP_I2C
+ 
++config SND_SOC_TFA9879
++	tristate "NXP Semiconductors TFA9879 amplifier"
++	depends on I2C
++
+ config SND_SOC_TFA9865
+ 	tristate "NXP/Goodix TFA9865 amplifier"
+ 	depends on I2C
+ 	select REGMAP_I2C
+ 	help
+ 	  Enable support for the NXP (now Goodix) TFA9865 mono class-D
+-	  speaker amplifier with boost converter. The amplifier has no DSP,
+-	  speaker protection is left to the host. The driver supports the
+-	  B0 revision of the chip with 32-bit I2S slots.
++	  speaker amplifier with boost converter. The amplifier has no DSP;
++	  speaker protection is left to the host. B0 and internal revision
++	  0x103a65 are supported with two 32-bit I2S slots.
+ 
+ 	  To compile this driver as a module, choose M here: the module
+ 	  will be called snd-soc-tfa9865.
+ 
+-config SND_SOC_TFA9879
+-	tristate "NXP Semiconductors TFA9879 amplifier"
+-	depends on I2C
+-
+ config SND_SOC_TFA989X
+ 	tristate "NXP/Goodix TFA989X (TFA1) amplifiers"
+ 	depends on I2C
+diff --git a/sound/soc/codecs/Makefile b/sound/soc/codecs/Makefile
+index 3b69e1139..446d42785 100644
+--- a/sound/soc/codecs/Makefile
++++ b/sound/soc/codecs/Makefile
+@@ -332,8 +332,8 @@ snd-soc-tas2781-comlib-i2c-y := tas2781-comlib-i2c.o
+ snd-soc-tas2781-fmwlib-y := tas2781-fmwlib.o
+ snd-soc-tas2781-i2c-y := tas2781-i2c.o
+ snd-soc-tas2783-sdw-y := tas2783-sdw.o
+-snd-soc-tfa9865-y := tfa9865.o
+ snd-soc-tfa9879-y := tfa9879.o
++snd-soc-tfa9865-y := tfa9865.o
+ snd-soc-tfa989x-y := tfa989x.o
+ snd-soc-tlv320adc3xxx-y := tlv320adc3xxx.o
+ snd-soc-tlv320aic23-y := tlv320aic23.o
+@@ -778,8 +778,8 @@ obj-$(CONFIG_SND_SOC_TAS6424)	+= snd-soc-tas6424.o
+ obj-$(CONFIG_SND_SOC_TAS675X)	+= snd-soc-tas675x.o
+ obj-$(CONFIG_SND_SOC_TDA7419)	+= snd-soc-tda7419.o
+ obj-$(CONFIG_SND_SOC_TAS2770) += snd-soc-tas2770.o
+-obj-$(CONFIG_SND_SOC_TFA9865)	+= snd-soc-tfa9865.o
+ obj-$(CONFIG_SND_SOC_TFA9879)	+= snd-soc-tfa9879.o
++obj-$(CONFIG_SND_SOC_TFA9865)	+= snd-soc-tfa9865.o
+ obj-$(CONFIG_SND_SOC_TFA989X)	+= snd-soc-tfa989x.o
+ obj-$(CONFIG_SND_SOC_TLV320ADC3XXX)	+= snd-soc-tlv320adc3xxx.o
+ obj-$(CONFIG_SND_SOC_TLV320AIC23)	+= snd-soc-tlv320aic23.o
+diff --git a/sound/soc/codecs/tfa9865.c b/sound/soc/codecs/tfa9865.c
+index ca1a458e6..e25f14f4e 100644
+--- a/sound/soc/codecs/tfa9865.c
++++ b/sound/soc/codecs/tfa9865.c
+@@ -16,6 +16,7 @@
+ #include <linux/i2c.h>
+ #include <linux/module.h>
+ #include <linux/mutex.h>
++#include <linux/property.h>
+ #include <linux/regmap.h>
+ #include <linux/regulator/consumer.h>
+ #include <sound/pcm_params.h>
+@@ -58,6 +59,7 @@
+ struct tfa9865 {
+ 	struct regmap *regmap;
+ 	struct gpio_desc *reset_gpiod;
++	struct gpio_desc *spk_sw_gpiod;
+ 	/* Protects powered and unmuted */
+ 	struct mutex lock;
+ 	bool powered;
+@@ -89,6 +91,16 @@ static int tfa9865_ampe_event(struct snd_soc_dapm_widget *w,
+ 	return tfa9865_update_ampe(tfa9865);
+ }
+ 
++static int tfa9865_spk_sw_event(struct snd_soc_dapm_widget *w,
++			       struct snd_kcontrol *kcontrol, int event)
++{
++	struct snd_soc_component *component = snd_soc_dapm_to_component(w->dapm);
++	struct tfa9865 *tfa9865 = snd_soc_component_get_drvdata(component);
++
++	gpiod_set_value_cansleep(tfa9865->spk_sw_gpiod, 0);
++	return 0;
++}
++
+ static bool tfa9865_volatile_reg(struct device *dev, unsigned int reg)
+ {
+ 	switch (reg) {
+@@ -127,6 +139,8 @@ static const struct snd_kcontrol_new tfa9865_controls[] = {
+ 
+ static const struct snd_soc_dapm_widget tfa9865_dapm_widgets[] = {
+ 	SND_SOC_DAPM_OUTPUT("OUT"),
++	SND_SOC_DAPM_SUPPLY("SPK_SW", SND_SOC_NOPM, 0, 0, tfa9865_spk_sw_event,
++			    SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
+ 	SND_SOC_DAPM_SUPPLY("POWER", TFA9865_SYS_CTRL0, TFA9865_SYS_CTRL0_PWDN, 1, NULL, 0),
+ 	SND_SOC_DAPM_SUPPLY("BOOST", TFA9865_SYS_CTRL0, TFA9865_SYS_CTRL0_DCA, 0, NULL, 0),
+ 	SND_SOC_DAPM_OUT_DRV_E("AMPE", SND_SOC_NOPM, 0, 0, NULL, 0, tfa9865_ampe_event,
+@@ -141,6 +155,7 @@ static const struct snd_soc_dapm_widget tfa9865_dapm_widgets[] = {
+ static const struct snd_soc_dapm_route tfa9865_dapm_routes[] = {
+ 	{"OUT", NULL, "AMPE"},
+ 	{"AMPE", NULL, "POWER"},
++	{"AMPE", NULL, "SPK_SW"},
+ 	{"AMPE", NULL, "BOOST"},
+ 	{"AMPE", NULL, "Amp"},
+ 	{"Amp", "Switch", "Amp Input"},
+@@ -210,7 +225,44 @@ static int tfa9865_mute_stream(struct snd_soc_dai *dai, int mute, int stream)
+ 	return tfa9865_update_ampe(tfa9865);
+ }
+ 
++static int tfa9865_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
++{
++	unsigned int value;
++	int ret;
++
++	if ((fmt & SND_SOC_DAIFMT_FORMAT_MASK) != SND_SOC_DAIFMT_I2S ||
++	    (fmt & SND_SOC_DAIFMT_CLOCK_PROVIDER_MASK) != SND_SOC_DAIFMT_BC_FC)
++		return -EINVAL;
++
++	switch (fmt & SND_SOC_DAIFMT_INV_MASK) {
++	case SND_SOC_DAIFMT_NB_NF:
++		value = 0;
++		break;
++	case SND_SOC_DAIFMT_IB_NF:
++		value = BIT(4);
++		break;
++	default:
++		return -EINVAL;
++	}
++
++	/* TDMCLINV selects the receive edge; TDMFSPOL selects FS polarity. */
++	ret = snd_soc_component_update_bits(dai->component, 0x20,
++					    BIT(4) | BIT(5), value);
++	return ret < 0 ? ret : 0;
++}
++
++static int tfa9865_set_tdm_slot(struct snd_soc_dai *dai, unsigned int tx_mask,
++			      unsigned int rx_mask, int slots, int slot_width)
++{
++	if (slots != 2 || slot_width != 32 || (tx_mask & ~3) || (rx_mask & ~3))
++		return -EINVAL;
++
++	return 0;
++}
++
+ static const struct snd_soc_dai_ops tfa9865_dai_ops = {
++	.set_fmt = tfa9865_set_fmt,
++	.set_tdm_slot = tfa9865_set_tdm_slot,
+ 	.hw_params = tfa9865_hw_params,
+ 	.mute_stream = tfa9865_mute_stream,
+ 	.no_capture_mute = 1,
+@@ -263,9 +315,75 @@ static const struct reg_sequence tfa9865_b0_init[] = {
+ 	{ 0xdd, 0x01b6 },
+ };
+ 
+-static int tfa9865_init(struct tfa9865 *tfa9865)
++/* NXP tfa986x_specific(), internal revision 0x103a65. */
++static const struct reg_sequence tfa9865_103a65_init[] = {
++	{ 0x00, 0xf241 },
++	{ 0x02, 0x0628 },
++	{ 0x50, 0xc000 },
++	{ 0x5a, 0x5f4c },
++	{ 0x5b, 0x74e2 },
++	{ 0x5c, 0x302b },
++	{ 0x5f, 0x00a0 },
++	{ 0x62, 0x05c4 },
++	{ 0x63, 0x80d4 },
++	{ 0x67, 0x0066 },
++	{ 0x68, 0x0820 },
++	{ 0x74, 0x60f0 },
++	{ 0x75, 0x0e00 },
++	{ 0x78, 0x0001 },
++	{ 0x7c, 0x10f2 },
++	{ 0xcf, 0x2cd7 },
++	{ 0xd7, 0x1000 },
++	{ 0xdd, 0x0036 },
++};
++
++static int tfa9865_select_init(struct tfa9865 *tfa9865, unsigned int devrev,
++			     const struct reg_sequence **seq, size_t *count)
++{
++	unsigned int revision, otp_f0, otp_f3, otp_f4;
++	int ret;
++
++	if (((devrev >> 2) & 3) == 1 && !(devrev & 0xf0)) {
++		*seq = tfa9865_b0_init;
++		*count = ARRAY_SIZE(tfa9865_b0_init);
++		return 0;
++	}
++
++	/* Match the vendor's device-info and OTP revision decoding. */
++	revision = 0x0a66 + ((devrev & 0xf0) << 8) + ((devrev & 0x0c) << 6);
++	ret = regmap_read(tfa9865->regmap, 0xf3, &otp_f3);
++	if (ret)
++		return ret;
++	if (FIELD_GET(GENMASK(12, 11), otp_f3)) {
++		revision--;
++		ret = regmap_read(tfa9865->regmap, 0xf0, &otp_f0);
++		if (ret)
++			return ret;
++		ret = regmap_read(tfa9865->regmap, 0xf4, &otp_f4);
++		if (ret)
++			return ret;
++		if (!(otp_f0 & BIT(9)))
++			revision |= BIT(16);
++		else if (!(otp_f4 & BIT(15)))
++			revision |= BIT(20);
++		if (otp_f4 & BIT(15))
++			revision--;
++	}
++	revision += (devrev & 3) << 20;
++
++	if (revision != 0x103a65)
++		return dev_err_probe(regmap_get_device(tfa9865->regmap), -ENODEV,
++				     "unsupported internal revision %#x\n", revision);
++	*seq = tfa9865_103a65_init;
++	*count = ARRAY_SIZE(tfa9865_103a65_init);
++	return 0;
++}
++
++static int tfa9865_init(struct tfa9865 *tfa9865, unsigned int devrev)
+ {
+ 	struct regmap *regmap = tfa9865->regmap;
++	const struct reg_sequence *seq;
++	size_t count;
+ 	unsigned int seed;
+ 	int ret;
+ 
+@@ -289,6 +407,10 @@ static int tfa9865_init(struct tfa9865 *tfa9865)
+ 	if (ret)
+ 		return ret;
+ 
++	ret = tfa9865_select_init(tfa9865, devrev, &seq, &count);
++	if (ret)
++		return ret;
++
+ 	/* Unlock key 1 and key 2 */
+ 	regmap_write(regmap, TFA9865_HIDE_UNHIDE_KEY, 0x5a6b);
+ 	ret = regmap_read(regmap, TFA9865_KEY1_SEED, &seed);
+@@ -297,7 +419,7 @@ static int tfa9865_init(struct tfa9865 *tfa9865)
+ 	regmap_write(regmap, TFA9865_KEY1, seed ^ 0x005a);
+ 	regmap_write(regmap, TFA9865_KEY2, 0x005a);
+ 
+-	ret = regmap_multi_reg_write(regmap, tfa9865_b0_init, ARRAY_SIZE(tfa9865_b0_init));
++	ret = regmap_multi_reg_write(regmap, seq, count);
+ 
+ 	/* Lock the keys again */
+ 	regmap_write(regmap, TFA9865_KEY2, 0);
+@@ -327,6 +449,7 @@ static int tfa9865_i2c_probe(struct i2c_client *i2c)
+ 	struct device *dev = &i2c->dev;
+ 	struct tfa9865 *tfa9865;
+ 	unsigned int val, devrev;
++	u32 slot;
+ 	int ret;
+ 
+ 	tfa9865 = devm_kzalloc(dev, sizeof(*tfa9865), GFP_KERNEL);
+@@ -353,6 +476,11 @@ static int tfa9865_i2c_probe(struct i2c_client *i2c)
+ 		usleep_range(1000, 2000);
+ 	}
+ 
++	tfa9865->spk_sw_gpiod = devm_gpiod_get_optional(dev, "spk-sw", GPIOD_OUT_LOW);
++	if (IS_ERR(tfa9865->spk_sw_gpiod))
++		return dev_err_probe(dev, PTR_ERR(tfa9865->spk_sw_gpiod),
++				     "failed to get speaker switch gpio\n");
++
+ 	tfa9865->regmap = devm_regmap_init_i2c(i2c, &tfa9865_regmap);
+ 	if (IS_ERR(tfa9865->regmap))
+ 		return PTR_ERR(tfa9865->regmap);
+@@ -369,15 +497,24 @@ static int tfa9865_i2c_probe(struct i2c_client *i2c)
+ 	if (ret)
+ 		return ret;
+ 
+-	/* Only the B0 init sequence is known */
+ 	devrev = FIELD_GET(TFA9865_DEVICE_INFO_DEVREV, val);
+-	if (((devrev >> 2) & 0x3) != 1 || (devrev & 0xf0))
+-		return dev_err_probe(dev, -ENODEV, "unsupported device revision %#x\n", devrev);
+-
+-	ret = tfa9865_init(tfa9865);
++	ret = tfa9865_init(tfa9865, devrev);
+ 	if (ret)
+ 		return dev_err_probe(dev, ret, "failed to initialize\n");
+ 
++	if (device_property_present(dev, "nxp,slot")) {
++		ret = device_property_read_u32(dev, "nxp,slot", &slot);
++		if (ret)
++			return ret;
++		if (slot > 1)
++			return dev_err_probe(dev, -EINVAL, "invalid input slot %u\n", slot);
++		ret = regmap_update_bits(tfa9865->regmap, TFA9865_TDM_CFG1,
++					BIT(TFA9865_TDM_CFG1_TDMSPKS),
++					slot << TFA9865_TDM_CFG1_TDMSPKS);
++		if (ret)
++			return ret;
++	}
++
+ 	return devm_snd_soc_register_component(dev, &tfa9865_component, &tfa9865_dai, 1);
+ }
+ 
+-- 
+2.53.0
+
