@@ -1,0 +1,13 @@
+[Unit]
+Description=Redmi K80 Pro (miro) WCN7861 Bluetooth firmware & address setup
+After=local-fs.target systemd-udev-settle.service
+Before=bluetooth.service
+ConditionPathExists=/sys/bus/serial/drivers/hci_uart_qca/serial0-0
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh -c 'if ! hciconfig hci0 2>/dev/null | grep -q "UP RUNNING"; then echo -n serial0-0 > /sys/bus/serial/drivers/hci_uart_qca/unbind 2>/dev/null || true; sleep 1; echo -n serial0-0 > /sys/bus/serial/drivers/hci_uart_qca/bind; for i in $(seq 1 30); do [ -e /sys/class/bluetooth/hci0 ] && break; sleep 1; done; sleep 1; if hciconfig hci0 2>/dev/null | grep -q RAW; then timeout 5 btmgmt --index 0 public-addr 78:55:00:01:5A:AD </dev/null || true; fi; fi; rfkill unblock bluetooth 2>/dev/null || true'
+
+[Install]
+WantedBy=multi-user.target

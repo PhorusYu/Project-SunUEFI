@@ -8,9 +8,12 @@
 
 - **合体 BOOT + Android 引导助手**：通过 `SUNUEFI-SPLITv1` 无损重打包 `boot_a`（保留原厂 Android 内核、`recovery` 与 `vbmeta`），配合 Magisk / KernelSU 模块 WebUI 实现脱离电脑独立双系统启动。
 - **UEFI 启动链**：`MiroUEFI`（SimpleInit 菜单 + 持久变量）→ `systemd-boot`（`sunuefi_esp`）→ Linux `7.3.3`（`sunuefi_root`）。
-- **120Hz 原生显示**：`xiaomi,miro-o11u`（`o11u_42_02_0a_dsc_cmd`，1440×3200 @ 120Hz）+ DPU DSC 1.2（`DRM_DSC_1_2_444`）+ TE 同步（`gpio86`），桌面与 `kmscube` 无花屏。
-- **Adreno 830 GPU**：加载 `gen80000_zap.mbn` + GMU `v5.1.25`，搭配 Mesa 27（Freedreno OpenGL 4.6 / Turnip Vulkan 1.4），Wayland GNOME 硬件合成正常。
-- **Wi-Fi 7 & USB NCM**：WCN7861（`ath12k` `peach hw2.0` + AOSS PDC 投票）与 USB NCM（`eusb2-repeater` + `udhcpd`）可用。
+- **120Hz 原生显示**：`xiaomi,miro-o11u`（`o11u_42_02_0a_dsc_cmd`，1440×3200 @ 120Hz）+ DPU DSC 1.2（`DRM_DSC_1_2_444`）+ TE 同步（`gpio86`）+ 屏幕背光亮度调节，桌面与 `kmscube` 无花屏。
+- **屏幕触控**：FocalTech FT3683 SPI 10 点触控（`focaltech_ft3683_spi`，`gpi_dma1` + `vreg_l12b_1p8` 供电）。
+- **物理按键**：电源键（`pmic_pwrkey`）、音量下键（`pmic_resin`）、音量上键（`gpio-keys` / `pm8550-gpio 6`）。
+- **Adreno 830 GPU**：加载 `gen80000_zap.mbn` + GMU `v5.1.25`，搭配 Mesa 27（Freedreno OpenGL 4.6 / Turnip Vulkan 1.4），Wayland GNOME 与 Firefox WebGL 硬件加速正常。
+- **Wi-Fi 7、蓝牙与 USB NCM**：WCN7861 Wi-Fi 7（`ath12k` `peach hw2.0` + AOSS PDC 投票，支持固定原厂 MAC）、WCN7861 蓝牙（`qcom,wcn7861-bt` + `miro-bt-setup.service`）与 USB NCM（`eusb2-repeater` + `udhcpd`）可用。
+- **电池电量与安全 5V 充电**：`bq27z561-0` 独立电量计 + `miro-adsp.service`（ADSP `charger_pd`）+ `miro_mca` 安全 5V 普通充电控制（支持 SDP/CDP/DCP/PD 限流、`4400 mV` 恒压、温度/电压保护及 `charge_behaviour`）。
 - **无损双系统分区**：基于 `piano-resize-f2fs` 与 `piano-storage` 无损收缩 `userdata`，建立 `sunuefi_esp`（512 MiB）与 `sunuefi_root`（`LABEL=PIANOROOT`）。
 
 ## 仓库核心目录

@@ -214,7 +214,8 @@ def build_miro_dtb(src_dtb: Path, out_dtb: Path, work_dir: Path) -> None:
 			status = "okay";
 			serial@898000 {{
 				bluetooth {{
-					max-speed = <115200>;
+					compatible = "qcom,wcn7861-bt";
+					max-speed = <3200000>;
 				}};
 			}};
 		}};
