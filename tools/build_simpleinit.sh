@@ -6,6 +6,7 @@ sun_mu="$sun_root/upstream/Mu-Silicium"
 sun_si="$sun_root/upstream/simple-init"
 sun_build="$sun_root/build/simpleinit-edk2"
 sun_output="$sun_root/artifacts/simpleinit"
+sun_target=NOOPT
 sun_prepare_args=()
 while (($#)); do
   case "$1" in
@@ -13,6 +14,7 @@ while (($#)); do
       sun_prepare_args+=(--product-gui-pump)
       sun_build="$sun_root/build/simpleinit-product-edk2"
       sun_output="$sun_root/artifacts/simpleinit/product"
+      sun_target=RELEASE
       shift;;
     --output-dir)
       [[ $# -ge 2 ]] || { echo '--output-dir requires a directory' >&2; exit 2; }
@@ -51,11 +53,11 @@ llvm-objcopy -I binary -O elf64-littleaarch64 -B aarch64 rootfs.bin rootfs_data.
 popd >/dev/null
 cd "$sun_build"
 "$PYTHON_COMMAND" "$EDK_TOOLS_PATH/Source/Python/build/build.py" \
-  -a AARCH64 -b NOOPT -t CLANGDWARF -p "$sun_build/SunSimpleInit.dsc" -n 8 \
+  -a AARCH64 -b "$sun_target" -t CLANGDWARF -p "$sun_build/SunSimpleInit.dsc" -n 8 \
   -y "$sun_build/simpleinit-build-report.txt"
 python3 "$sun_root/tools/prepare_product_pump.py" verify --manifest "$sun_build/product-pump-hooks-final.json" >/dev/null
 cmp "$sun_build/product-pump-hooks.json" "$sun_build/product-pump-hooks-final.json"
-cp "$sun_build/Build/SimpleInit/NOOPT_CLANGDWARF/AARCH64/SimpleInitMain.efi" \
+cp "$sun_build/Build/SimpleInit/${sun_target}_CLANGDWARF/AARCH64/SimpleInitMain.efi" \
   "$sun_output/SimpleInit.efi"
 cp "$sun_build/source-manifest.json" "$sun_output/source-manifest.json"
 cp "$sun_build/product-pump-hooks-final.json" "$sun_output/product-pump-hooks.json"

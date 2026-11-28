@@ -4,7 +4,7 @@
   "mirror": "https://deb.debian.org/debian", "components": ["main"], "sources": [
     "deb https://deb.debian.org/debian sid main"
   ],
-  "base_packages": ["systemd-sysv", "dbus", "sudo", "locales", "ca-certificates", "network-manager", "openssh-server", "kmod", "util-linux"],
+  "base_packages": ["systemd-sysv", "systemd-timesyncd", "dbus", "sudo", "locales", "ca-certificates", "network-manager", "openssh-server", "kmod", "util-linux"],
   "official_source": "https://www.debian.org/releases/sid/",
   "source_policy": "signed mutable APT; actual packages and repository metadata recorded"
 }

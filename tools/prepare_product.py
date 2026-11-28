@@ -563,6 +563,8 @@ def prepare(root=ROOT):
     dsc=target/'pianoProduct.dsc';text=dsc.read_text().replace('183A8587-C1F1-5FDD-8E2A-127FB6BD81A4','5E182CB1-63D4-44B5-AF6E-C23959625BA1')
     text=text.replace('pianoProductPkg/Library/Stage0BootManagerLib/Stage0BootManagerLib.inf','pianoProductPkg/Library/ProductBootManagerLib/ProductBootManagerLib.inf')
     text=text.replace('pianoProductPkg/Library/RamLogSerialPortLib/FrameBufferSerialPortLib.inf','pianoProductPkg/Library/RamOnlySerialPortLib/RamOnlySerialPortLib.inf')
+    if 'pianoProductPkg/Library/RamOnlySerialPortLib/RamOnlySerialPortLib.inf' not in text:
+        text+='\n[LibraryClasses]\n  SerialPortLib|pianoProductPkg/Library/RamOnlySerialPortLib/RamOnlySerialPortLib.inf\n'
     text=text.replace('# Stage 0: no persistent variables, storage, capsules or OS boot.','# Single product integration candidate; unfinished backends reported explicitly.')
     text+='''
 [LibraryClasses.common.DXE_CORE, LibraryClasses.common.DXE_DRIVER, LibraryClasses.common.UEFI_DRIVER, LibraryClasses.common.UEFI_APPLICATION]

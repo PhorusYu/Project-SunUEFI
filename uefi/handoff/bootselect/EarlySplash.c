@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BSD-2-Clause-Patent
-// Draw only into the inherited Piano framebuffer; no clocks, GPIOs or MMIO.
+// Draw only into miro's inherited framebuffer; no clocks, GPIOs or MMIO.
 #include "../../components/product-support/Library/ProductBootManagerLib/ProductSplash.h"
 #include "../../components/product-support/Library/ProductBootManagerLib/ProductSplashAssets.h"
 #include "EarlyKeys.h"
@@ -20,9 +20,13 @@ void *memcpy(void *Target,const void *Source,unsigned long Bytes) {
   return Target;
 }
 
+#ifndef FRAME_BASE
 #define FRAME_BASE 0xFC800000ULL
-#define FRAME_WIDTH 3200U
-#define FRAME_HEIGHT 2136U
+#endif
+// miro's ABL scanout is 1440x3200 BGRA with no scanline padding, matching
+// miroPkg's GOP PCDs. The reserved splash allocation is checked before drawing.
+#define FRAME_WIDTH 1440U
+#define FRAME_HEIGHT 3200U
 
 STATIC BOOLEAN EFIAPI Alive(VOID) {return TRUE;}
 STATIC EFI_STATUS EFIAPI Fill(EFI_GRAPHICS_OUTPUT_PROTOCOL *Gop,EFI_GRAPHICS_OUTPUT_BLT_PIXEL *Pixel,
@@ -91,29 +95,47 @@ STATIC VOID Text(CONST CHAR8 *String,UINT32 X,UINT32 Y,UINT32 Scale,UINT32 Rgb) 
   }
 }
 
+STATIC VOID CenterText(CONST CHAR8 *String,UINT32 Y,UINT32 Scale,UINT32 Rgb) {
+  UINT32 Length=0;while(String[Length])++Length;
+  if(!Length)return;
+  UINT32 Units=Length*6-1,Available=FRAME_WIDTH*84/100;
+  if(Scale>Available/Units)Scale=Available/Units;
+  if(!Scale)Scale=1;
+  Text(String,(FRAME_WIDTH-Units*Scale)/2,Y,Scale,Rgb);
+}
+
+STATIC VOID ChoiceMessage(CONST CHAR8 *String) {
+  Rect(0,FRAME_HEIGHT*77/100,FRAME_WIDTH,FRAME_HEIGHT*5/100,0xFFFFFF);
+  CenterText(String,FRAME_HEIGHT*78/100,FRAME_WIDTH/180,0x656B75);
+}
+
 // Exported for a host-rendered preview of the exact framebuffer drawing code.
 VOID PianoEarlyDrawChoice(unsigned Target,unsigned Seconds,int HaveKeys,int Initial) {
   if(Initial) {
     DrawBrand();
-    Rect(0,1010,FRAME_WIDTH,FRAME_HEIGHT-1010,0xFFFFFF);
-    Text("SELECT STARTUP",700,1050,9,0x565B63);
+    Rect(0,FRAME_HEIGHT*45/100,FRAME_WIDTH,FRAME_HEIGHT*55/100,0xFFFFFF);
+    CenterText("SELECT STARTUP",FRAME_HEIGHT*48/100,FRAME_WIDTH/160,0x565B63);
   }
+  UINT32 X=FRAME_WIDTH/10,W=FRAME_WIDTH*8/10,H=FRAME_HEIGHT*8/100;
   for(unsigned I=0;I<2;++I) {
     int Selected=(Target!=0)==(I!=0);
-    UINT32 Y=1170+I*250;
-    Rect(700,Y,1800,200,Selected?0x4273E2:0xE7EAF0);
-    Rect(704,Y+4,1792,192,Selected?0xEEF4FF:0xF8F9FB);
-    Text(I?"UEFI":"ANDROID",810,Y+55,13,Selected?0x2254B5:0x383D46);
-    if(Selected)Text("SELECTED",1950,Y+68,8,0x4273E2);
+    UINT32 Y=FRAME_HEIGHT*(55+I*10)/100;
+    Rect(X,Y,W,H,Selected?0x4273E2:0xE7EAF0);
+    Rect(X+4,Y+4,W-8,H-8,Selected?0xEEF4FF:0xF8F9FB);
+    CenterText(I?"UEFI":"ANDROID",Y+H/5,FRAME_WIDTH/120,Selected?0x2254B5:0x383D46);
+    if(Selected)CenterText("SELECTED",Y+H*3/5,FRAME_WIDTH/240,0x4273E2);
   }
-  Rect(690,1690,1900,130,0xFFFFFF);
   CHAR8 Count[]="AUTO START IN 3 SECONDS";Count[14]=(CHAR8)('0'+Seconds);
-  Text(Count,700,1710,8,0x656B75);
-  Rect(700,1805,1800,8,0xE9EDF3);
-  if(Seconds)Rect(700,1805,600*Seconds,8,0x4273E2);
-  Rect(0,1880,FRAME_WIDTH,256,0xFFFFFF);
-  Text(HaveKeys?"VOLUME UP  ANDROID     VOLUME DOWN  UEFI":"CONTINUING SAVED STARTUP",192,1910,6,0x656B75);
-  if(HaveKeys)Text("POWER  CONFIRM     THIS CHOICE IS FOR THIS BOOT ONLY",192,2010,5,0x848A94);
+  ChoiceMessage(Count);
+  Rect(X,FRAME_HEIGHT*83/100,W,8,0xE9EDF3);
+  if(Seconds)Rect(X,FRAME_HEIGHT*83/100,W*Seconds/3,8,0x4273E2);
+  Rect(0,FRAME_HEIGHT*86/100,FRAME_WIDTH,FRAME_HEIGHT*14/100,0xFFFFFF);
+  if(HaveKeys) {
+    CenterText("VOLUME UP  ANDROID",FRAME_HEIGHT*88/100,FRAME_WIDTH/220,0x656B75);
+    CenterText("VOLUME DOWN  UEFI",FRAME_HEIGHT*91/100,FRAME_WIDTH/220,0x656B75);
+    CenterText("POWER  CONFIRM",FRAME_HEIGHT*94/100,FRAME_WIDTH/220,0x848A94);
+    CenterText("THIS BOOT ONLY",FRAME_HEIGHT*97/100,FRAME_WIDTH/280,0x848A94);
+  }else CenterText("CONTINUING SAVED STARTUP",FRAME_HEIGHT*91/100,FRAME_WIDTH/220,0x656B75);
   FlushFrame();
 }
 
@@ -169,8 +191,7 @@ unsigned PianoEarlyChoose(CONST VOID *Fdt,unsigned DefaultTarget) {
   }
   // Leave a visible handoff message. No later native display driver is used
   // on Android; the original GKI sees the exact ABL register/DTB/initrd tuple.
-  Rect(690,1690,1900,130,0xFFFFFF);
-  Text(Selected?"STARTING UEFI":"STARTING ANDROID",700,1710,8,0x656B75);
+  ChoiceMessage(Selected?"STARTING UEFI":"STARTING ANDROID");
   FlushFrame();return Selected;
 #else
   (VOID)Fdt;return DefaultTarget;

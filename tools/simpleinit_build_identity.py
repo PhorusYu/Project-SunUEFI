@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import re
 
 from prepare_product_pump import ROOT, prepare
 
@@ -56,10 +57,16 @@ def inspect(build, output, product):
     report=build/'simpleinit-build-report.txt'
     # EDK2 wraps long library paths before a slash in its text report.
     report_text=report.read_text().replace('\n/', '/')
-    base=build/'Build/SimpleInit/NOOPT_CLANGDWARF/AARCH64'
+    target='RELEASE' if product else 'NOOPT'
+    base=build/f'Build/SimpleInit/{target}_CLANGDWARF/AARCH64'
     gui=base/'src/gui/SimpleInitGUI/GNUmakefile'
     main=base/'src/main/SimpleInitMain/GNUmakefile'
     gui_text=gui.read_text();main_text=main.read_text()
+    if product:
+        flags=re.search(r'^CC_FLAGS\s*=\s*(.*)$',gui_text,re.MULTILINE)
+        optimizations=re.findall(r'(?:^|\s)(-O(?:[0-3sgz]|fast))(?=\s|$)',flags[1]) if flags else []
+        if not optimizations or optimizations[-1]=='-O0':
+            raise ValueError('actual product GUI build has no effective optimization')
     real='MdePkg/Library/PianoProductPumpLib/PianoProductPumpLib.inf'
     null='MdePkg/Library/PianoProductPumpLibNull/PianoProductPumpLibNull.inf'
     link_real='/MdePkg/Library/PianoProductPumpLib/PianoProductPumpLib/OUTPUT/PianoProductPumpLib.lib'
@@ -72,7 +79,7 @@ def inspect(build, output, product):
             raise ValueError('actual diagnostic build did not bind Null/disabled GUI pump')
     built=base/'SimpleInitMain.efi';exported=output/'SimpleInit.efi'
     if sha(built)!=sha(exported):raise ValueError('exported application differs from actual build output')
-    return {'product_gui_pump':product,'application_bytes':exported.stat().st_size,'application_sha256':sha(exported),
+    return {'product_gui_pump':product,'build_target':target,'application_bytes':exported.stat().st_size,'application_sha256':sha(exported),
             'source_manifest_sha256':sha(build/'source-manifest.json'),'dsc_sha256':sha(build/'SunSimpleInit.dsc'),
             'pump_hooks':hooks,'report_sha256':sha(report),'gui_makefile_sha256':sha(gui),'main_makefile_sha256':sha(main),
             'physical_validation':False}

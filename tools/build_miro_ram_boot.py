@@ -102,6 +102,7 @@ def build_miro_dtb(src_dtb: Path, out_dtb: Path, work_dir: Path) -> None:
     dts_text = dts_file.read_text()
     tlmm_ph = find_phandle(dts_text, r"pinctrl@f100000\s*\{")
     l2g_ph = find_phandle(dts_text, r'regulator-name\s*=\s*"vreg_l2g_1p8";')
+    l13b_ph = find_phandle(dts_text, r'regulator-name\s*=\s*"vreg_l13b_3p0";')
     l12b_ph = find_phandle(dts_text, r'regulator-name\s*=\s*"vreg_l12b_1p8";')
     pm8550_gpio_ph = find_phandle(dts_text, r'compatible\s*=\s*"qcom,pm8550-gpio"')
     aoss_qmp_ph = find_phandle(dts_text, r"power-management@c300000\s*\{")
@@ -119,7 +120,6 @@ def build_miro_dtb(src_dtb: Path, out_dtb: Path, work_dir: Path) -> None:
 		gpio = <{tlmm_ph} 120 0>;
 		enable-active-high;
 		regulator-boot-on;
-		regulator-always-on;
 		phandle = <0x7fff>;
 	}};
 
@@ -280,7 +280,7 @@ def build_miro_dtb(src_dtb: Path, out_dtb: Path, work_dir: Path) -> None:
 					reset-gpios = <{tlmm_ph} 98 1>;
 					vddio-supply = <{l2g_ph}>;
 					vdd-supply = <0x7fff>;
-					/delete-property/ vci-supply;
+					vci-supply = <{l13b_ph}>;
 				}};
 			}};
 		}};

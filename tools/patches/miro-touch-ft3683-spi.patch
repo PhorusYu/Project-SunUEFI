@@ -1,3 +1,28 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PhorusYu <PhorusYu@users.noreply.github.com>
+Date: Sat, 28 Nov 2026 11:19:05 +0800
+Subject: [PATCH] Input: focaltech-ft3683 - support miro SPI touch reports
+
+Read the FT3683 SPI report with CRC validation and report contact slots
+through the input multitouch interface. Support ten contacts in both
+report formats. V2 records occupy eight bytes after the four-byte header;
+read the complete 84-byte report. Scan legacy records until the ID
+terminator so a released contact does not hide a remaining contact.
+
+Match the native fractional coordinate encoding and keep the board's
+coordinate scaling. Reject unknown report modes without synthesizing an
+empty input frame. The original six-byte V2 stride only decoded the first
+contact correctly. Ten simultaneous contacts were verified on Redmi K80
+Pro using a browser multitouch test and kernel input events.
+
+Link: https://android.googlesource.com/kernel/google-modules/touch/focaltech_touch/+/1f631813e7dbf8c272da5fafefc51434908f72eb/ft3683u/focaltech_common.h
+---
+ drivers/input/touchscreen/Kconfig             |   8 +
+ drivers/input/touchscreen/Makefile            |   1 +
+ .../input/touchscreen/focaltech_ft3683_spi.c  | 387 ++++++++++++++++++
+ 3 files changed, 396 insertions(+)
+ create mode 100644 drivers/input/touchscreen/focaltech_ft3683_spi.c
+
 diff --git a/drivers/input/touchscreen/Kconfig b/drivers/input/touchscreen/Kconfig
 index 064b877d5..b6fd68f8f 100644
 --- a/drivers/input/touchscreen/Kconfig
@@ -26,10 +51,10 @@ index aff201044..0b25cc2a2 100644
 +obj-$(CONFIG_TOUCHSCREEN_FOCALTECH_FT3683_SPI)	+= focaltech_ft3683_spi.o
 diff --git a/drivers/input/touchscreen/focaltech_ft3683_spi.c b/drivers/input/touchscreen/focaltech_ft3683_spi.c
 new file mode 100644
-index 000000000..6e4e974b5
+index 000000000..9a62cbe37
 --- /dev/null
 +++ b/drivers/input/touchscreen/focaltech_ft3683_spi.c
-@@ -0,0 +1,379 @@
+@@ -0,0 +1,387 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * FocalTech FT3683 SPI touchscreen driver (Redmi K80 Pro / miro)
@@ -52,7 +77,9 @@ index 000000000..6e4e974b5
 +#define FTS_DEFAULT_MAX_Y		3200
 +#define FTS_SPI_HDR_LEN			7
 +#define FTS_SPI_CRC_LEN			2
-+#define FTS_TOUCH_BUF_LEN		(4 + 6 * FTS_MAX_POINTS)
++#define FTS_TOUCH_V1_POINT_LEN		6
++#define FTS_TOUCH_V2_POINT_LEN		8
++#define FTS_TOUCH_BUF_LEN		(4 + FTS_TOUCH_V2_POINT_LEN * FTS_MAX_POINTS)
 +#define FTS_XFER_BUF_SIZE		(FTS_SPI_HDR_LEN + FTS_TOUCH_BUF_LEN + FTS_SPI_CRC_LEN)
 +
 +#define FTS_REG_TOUCH_DATA		0x01
@@ -179,6 +206,7 @@ index 000000000..6e4e974b5
 +	struct ft3683_ts *ts = dev_id;
 +	u8 buf[FTS_TOUCH_BUF_LEN];
 +	u8 mode, points;
++	unsigned int records;
 +	int i, ret;
 +
 +	ret = fts_read(ts, FTS_REG_TOUCH_DATA, buf, sizeof(buf));
@@ -189,17 +217,19 @@ index 000000000..6e4e974b5
 +
 +	mode = buf[1] >> 4;
 +	points = buf[1] & 0x0F;
-+	if (points > FTS_MAX_POINTS)
-+		points = FTS_MAX_POINTS;
++	if ((mode != 0 && mode != 2) || points > FTS_MAX_POINTS)
++		return IRQ_HANDLED;
 +
-+	for (i = 0; i < points; i++) {
++	/* V1 counts active fingers; its records can also include finger-up events. */
++	records = mode == 2 || !points ? points : FTS_MAX_POINTS;
++	for (i = 0; i < records; i++) {
 +		size_t off;
 +		u8 ev, id;
 +		u16 px, py;
 +		bool down;
 +
 +		if (mode == 2) {
-+			off = 4 + 6 * i;
++			off = 4 + FTS_TOUCH_V2_POINT_LEN * i;
 +			if (off + 5 >= sizeof(buf))
 +				break;
 +			px = (((buf[off] & 0x0F) << 12) |
@@ -209,7 +239,10 @@ index 000000000..6e4e974b5
 +			      (buf[off + 3] << 4) |
 +			      (buf[off + 4] & 0x0F)) >> 4;
 +		} else if (mode == 0) {
-+			off = 2 + 6 * i;
++			off = 2 + FTS_TOUCH_V1_POINT_LEN * i;
++			/* V1 terminates its record list with an invalid point ID. */
++			if ((buf[off + 2] >> 4) >= FTS_MAX_POINTS)
++				break;
 +			if (off + 5 >= sizeof(buf))
 +				break;
 +			px = (((buf[off] & 0x0F) << 11) |
@@ -217,7 +250,7 @@ index 000000000..6e4e974b5
 +			      ((buf[off + 4] >> 5) & 0x07)) / 10;
 +			py = (((buf[off + 2] & 0x0F) << 11) |
 +			      (buf[off + 3] << 3) |
-+			      ((buf[off + 4] >> 3) & 0x07)) / 10;
++			      ((buf[off + 4] >> 2) & 0x07)) / 10;
 +		} else {
 +			break;
 +		}

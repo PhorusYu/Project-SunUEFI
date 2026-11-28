@@ -4,7 +4,7 @@
 typedef struct { INT32 X,Y; } SPLASH_POINT;
 STATIC CONST SPLASH_POINT mSpokes[6]={{0,-1000},{866,-500},{866,500},{0,1000},{-866,500},{-866,-500}};
 STATIC CONST CHAR8 mBrand[]="tianocore";
-STATIC CONST CHAR8 mSubtitle[]="SunUEFI / Piano";
+STATIC CONST CHAR8 mSubtitle[]="SunUEFI / miro";
 #ifdef PIANO_EARLY_SPLASH
 STATIC CONST CHAR8 mSetupHint[]="Hold Volume Up at power-on: Recovery";
 STATIC CONST CHAR8 mKeysHint[]="Android / Recovery   SunUEFI boot assistant";

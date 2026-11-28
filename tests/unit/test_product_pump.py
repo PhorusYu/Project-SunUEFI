@@ -88,7 +88,7 @@ class ProductPumpTests(unittest.TestCase):
     def test_build_identity_refuses_wrong_actual_binding_flags_and_output(self):
         if PREPARED==ROOT:self.skipTest(WORKSPACE_ABSENT)
         hooks=prepare.prepare(PREPARED,apply=False)
-        for mutation in ('none','report','link','gui','output','dsc','sources','navigation_sources'):
+        for mutation in ('none','report','link','gui','unoptimized','output','dsc','sources','navigation_sources'):
             with self.subTest(mutation=mutation),tempfile.TemporaryDirectory(prefix='product-si-id-')as directory:
                 base=Path(directory);build=base/'build';output=base/'output';build.mkdir();output.mkdir()
                 dsc=build/'SunSimpleInit.dsc';dsc.write_text('real product DSC')
@@ -96,13 +96,14 @@ class ProductPumpTests(unittest.TestCase):
                 source={'product_gui_pump':True,'pump_hooks':hooks,'ui_hooks':{},'dsc_sha256':identity.sha(dsc),'owned_sources':{str(owned.relative_to(PREPARED)):identity.sha(owned),**{name:identity.sha(PREPARED/name)for name in identity.PRODUCT_NAVIGATION_SOURCES}}}
                 (build/'source-manifest.json').write_text(__import__('json').dumps(source))
                 report=build/'simpleinit-build-report.txt';report.write_text('MdePkg/Library/PianoProductPumpLib/PianoProductPumpLib.inf')
-                target=build/'Build/SimpleInit/NOOPT_CLANGDWARF/AARCH64';target.mkdir(parents=True)
-                gui=target/'src/gui/SimpleInitGUI/GNUmakefile';gui.parent.mkdir(parents=True);gui.write_text('-DPIANO_PRODUCT_GUI_PUMP=1')
+                target=build/'Build/SimpleInit/RELEASE_CLANGDWARF/AARCH64';target.mkdir(parents=True)
+                gui=target/'src/gui/SimpleInitGUI/GNUmakefile';gui.parent.mkdir(parents=True);gui.write_text('CC_FLAGS = -Os -DPIANO_PRODUCT_GUI_PUMP=1')
                 main=target/'src/main/SimpleInitMain/GNUmakefile';main.parent.mkdir(parents=True);main.write_text('/MdePkg/Library/PianoProductPumpLib/PianoProductPumpLib/OUTPUT/PianoProductPumpLib.lib')
                 (target/'SimpleInitMain.efi').write_bytes(b'actual build output');(output/'SimpleInit.efi').write_bytes(b'actual build output')
                 if mutation=='report':report.write_text('MdePkg/Library/PianoProductPumpLibNull/PianoProductPumpLibNull.inf')
                 if mutation=='link':main.write_text('/MdePkg/Library/PianoProductPumpLibNull/PianoProductPumpLibNull/OUTPUT/PianoProductPumpLibNull.lib')
                 if mutation=='gui':gui.write_text('-DPIANO_PRODUCT_GUI_PUMP=0')
+                if mutation=='unoptimized':gui.write_text('CC_FLAGS = -Os -DPIANO_PRODUCT_GUI_PUMP=1 -O0')
                 if mutation=='output':(output/'SimpleInit.efi').write_bytes(b'old output')
                 if mutation=='dsc':dsc.write_text('changed DSC')
                 if mutation=='sources':source['pump_hooks']={};(build/'source-manifest.json').write_text(__import__('json').dumps(source))

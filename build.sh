@@ -29,6 +29,9 @@ case "$command" in
   nyarch-rootfs|nyarch-gnome-rootfs) python3 tools/build_nyarch_rootfs.py "$@" ;;
   arch-denial-rootfs) python3 tools/build_nyarch_rootfs.py --desktop denial "$@" ;;
   gsd) python3 tools/build_gsd_packages.py "$@" ;;
+  resources) python3 tools/desktop/build_resources_package.py "$@" ;;
+  gtk) python3 tools/desktop/build_gtk_packages.py "$@" ;;
+  control-center) python3 tools/desktop/build_control_center_packages.py "$@" ;;
   gdm) python3 tools/desktop/build_gdm_packages.py "$@" ;;
   bluez) python3 tools/desktop/build_bluez_package.py "$@" ;;
   libcamera) python3 tools/desktop/build_libcamera_packages.py "$@" ;;
@@ -86,7 +89,7 @@ case "$command" in
   install) python3 tools/install_piano.py "$@" ;;
   installer) python3 tools/export_installer.py "$@" ;;
   help|-h|--help)
-    printf '%s\n' 'Usage: ./build.sh sources|check|uefi|trampoline|module|module-package|boot-request|boot-repack|linux|linux-package|camera-package|mesa|sensors|miro-audio|display-calibration|ffmpeg|gsd|gdm|bluez|libcamera|denial|droidloom-package|pipewire|kwin|qt-multimedia|plasma-camera|libwacom|mutter|bsp|repo|rootfs|release-rootfs|nyarch-gnome-rootfs|arch-denial-rootfs|steamos-rootfs|package|all|installer|install' \
+    printf '%s\n' 'Usage: ./build.sh sources|check|uefi|trampoline|module|module-package|boot-request|boot-repack|linux|linux-package|camera-package|mesa|sensors|miro-audio|display-calibration|ffmpeg|gsd|gtk|resources|control-center|gdm|bluez|libcamera|denial|droidloom-package|pipewire|kwin|qt-multimedia|plasma-camera|libwacom|mutter|bsp|repo|rootfs|release-rootfs|nyarch-gnome-rootfs|arch-denial-rootfs|steamos-rootfs|package|all|installer|install' \
       'Full builds need the documented builder environment; rootfs/Mesa/sensors run in a root ARM64 build container.' \
       'miro-audio requires --topology-source pointing to local AudioReach templates.' \
       'release-rootfs reads its kernel source worktree from build/release/source-manifest.json.' \
