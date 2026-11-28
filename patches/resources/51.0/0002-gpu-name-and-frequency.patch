@@ -1,0 +1,91 @@
+diff -ruN a/src/devices/gpu/other.rs b/src/devices/gpu/other.rs
+--- a/src/devices/gpu/other.rs	2026-11-28 16:09:00.850524645 +0800
++++ b/src/devices/gpu/other.rs	2026-11-28 16:09:00.884096434 +0800
+@@ -1,4 +1,4 @@
+-use anyhow::{Result, bail};
++use anyhow::{Context, Result, bail};
+ use process_data::gpu_usage::GpuIdentifier;
+ 
+ use std::{
+@@ -112,7 +112,12 @@
+     }
+ 
+     fn name(&self) -> Result<String> {
+-        self.drm_name()
++        // msm exposes the display controller as the DRM master and the GPU as a
++        // component, so there is no PCI device to name it after. Fall back to the
++        // renderer string the desktop tools report, never to a guessed model name.
++        self.drm_name().or_else(|_| {
++            platform::gpu_renderer_name().context("no GPU name available")
++        })
+     }
+ 
+     fn usage(&self) -> Result<f64> {
+@@ -149,7 +154,7 @@
+     }
+ 
+     fn core_frequency(&self) -> Result<f64> {
+-        self.hwmon_core_frequency()
++        devfreq_core_frequency().or_else(|_| self.hwmon_core_frequency())
+     }
+ 
+     fn vram_frequency(&self) -> Result<f64> {
+@@ -164,3 +169,25 @@
+         self.hwmon_power_cap_max()
+     }
+ }
++
++/// Platform GPUs expose their clock through devfreq. Identify the GPU device by
++/// its device-tree compatible instead of any invented name.
++fn devfreq_core_frequency() -> Result<f64> {
++    for entry in std::fs::read_dir("/sys/class/devfreq")? {
++        let path = entry?.path();
++        let Ok(uevent) = std::fs::read_to_string(path.join("device/uevent")) else {
++            continue;
++        };
++        let is_gpu = uevent.lines().any(|line| {
++            line.strip_prefix("OF_COMPATIBLE_")
++                .and_then(|rest| rest.split_once('='))
++                .is_some_and(|(_index, value)| value.starts_with("qcom,adreno"))
++        });
++        if !is_gpu {
++            continue;
++        }
++        let hertz = std::fs::read_to_string(path.join("cur_freq"))?;
++        return Ok(hertz.trim().parse::<f64>()?);
++    }
++    bail!("no adreno devfreq device")
++}
+diff -ruN a/src/devices/platform.rs b/src/devices/platform.rs
+--- a/src/devices/platform.rs	2026-11-28 16:09:00.851238356 +0800
++++ b/src/devices/platform.rs	2026-11-28 16:09:00.883993911 +0800
+@@ -270,3 +270,29 @@
+         assert!(adreno_node(&f.0.join("dt"), 0x44050001).is_some());
+     }
+ }
++
++/// Renderer string reported by the standard GTK helper.
++///
++/// Querying GL from inside the app is not safe on this stack: a shared, surfaceless
++/// context realizes fine but `glGetString` segfaults. The helper uses a pbuffer
++/// surface and prints the same string the desktop tools show, so reuse it instead
++/// of inventing a GPU name.
++static GPU_RENDERER: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
++
++const RENDERER_HELPERS: &[&str] = &["/usr/libexec/gnome-control-center-print-renderer"];
++
++pub fn gpu_renderer_name() -> Option<String> {
++    GPU_RENDERER
++        .get_or_init(|| {
++            RENDERER_HELPERS.iter().find_map(|helper| {
++                let output = std::process::Command::new(helper).output().ok()?;
++                if !output.status.success() {
++                    return None;
++                }
++                let name = String::from_utf8(output.stdout).ok()?;
++                let name = name.trim();
++                (!name.is_empty()).then(|| name.to_owned())
++            })
++        })
++        .clone()
++}

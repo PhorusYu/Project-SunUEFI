@@ -13,7 +13,7 @@ from desktop import debian_package, package_build
 
 SERIES = ROOT / 'patches/resources/51.0/series.json'
 RUNTIME = {'resources': 'arm64'}
-REVISION = 1
+REVISION = 3
 
 
 def selection(rootfs):
@@ -27,7 +27,7 @@ def selection(rootfs):
 def validate_prepared(source):
     devices = source / 'src/devices'
     if (not (devices / 'platform.rs').is_file()
-            or 'msm_chip_id' not in (devices / 'gpu/other.rs').read_text()
+            or 'devfreq_core_frequency' not in (devices / 'gpu/other.rs').read_text()
             or 'platform::cpu_model_name' not in (devices / 'cpu.rs').read_text()):
         raise ValueError('The prepared Resources source lacks platform information support')
 

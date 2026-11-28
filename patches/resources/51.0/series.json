@@ -12,6 +12,24 @@
       },
       "sha256": "97e5c8468b33d8374af907ff8088119daf02b981f0b8747d10972c472a6114c2",
       "file": "0001-platform-cpu-and-thermal-sensors.patch"
+    },
+    {
+      "file": "0002-gpu-name-and-frequency.patch",
+      "sha256": "b548fa3ce2440fda96ba746acec71e36aff3a2e76370b8c434cc6980543564f4",
+      "upstream": {
+        "url": "https://gitlab.gnome.org/GNOME/Incubator/resources",
+        "status": "downstream",
+        "drop_when": "Resources names platform GPUs from the renderer string and reads their clock through devfreq instead of requiring a PCI device or hwmon."
+      }
+    },
+    {
+      "file": "0003-gpu-vendor-for-platform-devices.patch",
+      "sha256": "416a2355e9f4c5c0eb52a8dd993a5b9ba36415c064a662b0c6be9e727edb439b",
+      "upstream": {
+        "url": "https://gitlab.gnome.org/GNOME/Incubator/resources",
+        "status": "downstream",
+        "drop_when": "Resources reports a platform GPU's vendor from the device-tree vendor prefix instead of requiring a PCI device."
+      }
     }
   ],
   "targets": [

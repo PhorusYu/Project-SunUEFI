@@ -22,7 +22,13 @@ SunUEFI-miro 面向 Redmi K80 Pro（`miro`，SM8750）独立维护。当前实�
 
 桌面应用补丁的构建与解析测试不能代替真机界面验证。
 
-Resources 的 GPU 项为 N/A 的原因（2026-11-28 实机核对）：`/sys/class/drm/card1/device` 在 msm 上是**显示控制器**（`msm_dpu`，compatible `qcom,sm8750-dpu`），不是 PCI GPU，因此 `OtherGpu::name()` 走的 `Device::name()` 取不到名字；该节点下也没有 hwmon，温度、功耗、频率、VRAM 相应为 N/A。DT 中 GPU 节点为 `soc@0/gpu@3d00000`（`qcom,adreno-44050001`、`#cooling-cells = <2>`、phandle 347），但本平台没有任何 thermal zone 的 cooling-device 引用该 phandle，现有 `platform::node_thermal_paths()` 因此返回空，回落到不存在的 hwmon。真实可用的数据是 `/sys/class/devfreq/3d00000.gpu`（频率）与 `gpuss0`–`gpuss7` 温区。按项目既定规则（不硬编码 GPU 名称，renderer 以 Mesa/GTK EGL helper 为准），要补齐需另做一版 Resources 补丁：名称取 GL renderer，频率取 devfreq，温度需为 GPU 与 `gpuss*` 温区建立可解释的对应关系；本次未改动。
+Resources 的 GPU 项为 N/A 的原因（2026-11-28 实机核对）：`/sys/class/drm/card1/device` 在 msm 上是**显示控制器**（`msm_dpu`，compatible `qcom,sm8750-dpu`），不是 PCI GPU，因此 `OtherGpu::name()` 走的 `Device::name()` 取不到名字；该节点下也没有 hwmon，温度、功耗、频率、VRAM 相应为 N/A。DT 中 GPU 节点为 `soc@0/gpu@3d00000`（`qcom,adreno-44050001`、`#cooling-cells = <2>`、phandle 347），但本平台没有任何 thermal zone 的 cooling-device 引用该 phandle，现有 `platform::node_thermal_paths()` 因此返回空，回落到不存在的 hwmon。真实可用的数据是 `/sys/class/devfreq/3d00000.gpu`（频率）与 `gpuss0`–`gpuss7` 温区。
+
+上述缺口已由 0002/0003 两个补丁补齐（实机确认）：GPU 名称取标准 GTK helper 报出的 renderer 字符串（`Adreno (TM) 830v1`，与设置页同源，不硬编码型号），厂商取设备树根 compatible 的 vendor 前缀（`qcom` → `Qualcomm`），时钟取 `/sys/class/devfreq/3d00000.gpu/cur_freq`（实测 160 MHz 起随负载变化），温度由 `gpuss*` 温区匹配得到（实测 46–48 °C）。仍然为 N/A 的是硬件与内核未暴露的项：使用率/编解码占用（无 `gpu_busy_percent` 或引擎统计）、VRAM（统一内存）、功耗（无 hwmon）、链路（非 PCIe）。
+
+注意：GPU 名称依赖打过补丁的 GTK（helper 的 EGL 初始化由 GTK MR 10780 回移修复）。若 GTK 回退为官方包，helper 会报 `No EGL configuration available`，名称退回 N/A，其余字段不受影响。
+
+迭代方式：Resources 可以在手机上原生编译（约 50 秒，对比 WSL+qemu 的 25–30 分钟），使用 `tools/desktop/build_resources_on_device.sh`；该脚本补齐 meson 才会注入的编译期常量（`LIBEXECDIR` 必须指向 `/usr/libexec/resources`，`RESOURCES_FILE` 指向已安装的 gresource，否则启动会 panic 成空白窗口）。正式发布包仍由 WSL 的可复现流水线产出。
 
 UEFI 构建对照（2026-11-28 实测）：优化 RELEASE 镜像用 `fastboot boot` 临时启动时报 `Synchronous Exception`，未进桌面；同源码仅把 SimpleInit 改为 NOOPT 的镜像（`outputs/miro-uefi-noopt/MiroUEFI-product.img`，28,901,376 字节，SHA256 `f8eb8fc82920705541d9acf9687957d3bee14230ac1ab78152284fa5b4ecd82f`）发送 0.9 秒、12 秒进入 Linux，本次启动显示报错为 0。因此该崩溃属于优化暴露的问题，不是源码逻辑或硬件故障；NOOPT 镜像可作为兜底，但未写入 `boot_a`（安装的稳定镜像未改动）。同一 NOOPT 镜像下 GUI 详情的帧率读数仍为 0–1 fps，说明帧率问题是 GUI pump/渲染实现本身而非优化等级；实机评估为"勉强可接受"，暂不作为缺陷跟踪。
 

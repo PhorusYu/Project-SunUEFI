@@ -1,0 +1,65 @@
+diff -ruN a/src/devices/gpu/mod.rs b/src/devices/gpu/mod.rs
+--- a/src/devices/gpu/mod.rs	2026-09-14 20:29:57.000000000 +0800
++++ b/src/devices/gpu/mod.rs	2026-11-28 16:40:05.862192722 +0800
+@@ -364,6 +364,18 @@
+         Ok(self.device().context("no device")?.vendor())
+     }
+ 
++    /// Vendor name for display: the PCI vendor table when the GPU has a PCI
++    /// device, otherwise the device-tree vendor prefix of a platform GPU.
++    pub fn vendor_display_name(&self) -> Result<String> {
++        if let Ok(vendor) = self.get_vendor() {
++            return Ok(vendor.name().to_string());
++        }
++        crate::devices::platform::soc_vendor_name(std::path::Path::new(
++            "/sys/firmware/devicetree/base",
++        ))
++        .context("no vendor information")
++    }
++
+     pub fn link(&self) -> Result<Link> {
+         if let GpuIdentifier::PciSlot(pci_slot) = self.gpu_identifier() {
+             let pcie_link = LinkData::from_pci_slot(&pci_slot)?;
+diff -ruN a/src/devices/platform.rs b/src/devices/platform.rs
+--- a/src/devices/platform.rs	2026-11-28 16:40:05.841614719 +0800
++++ b/src/devices/platform.rs	2026-11-28 16:40:05.861926545 +0800
+@@ -296,3 +296,25 @@
+         })
+         .clone()
+ }
++
++/// SoC vendor from the device-tree root compatible string.
++///
++/// Only the vendor prefix is consulted; nothing about a model or a marketing
++/// name is guessed here.
++pub fn soc_vendor_name(root: &Path) -> Option<String> {
++    let raw = fs::read(root.join("compatible")).ok()?;
++    for entry in raw.split(|byte| *byte == 0).filter(|entry| !entry.is_empty()) {
++        let entry = std::str::from_utf8(entry).ok()?;
++        let (vendor, _model) = entry.split_once(',')?;
++        let name = match vendor {
++            "qcom" => "Qualcomm",
++            "mediatek" => "MediaTek",
++            "rockchip" => "Rockchip",
++            "nvidia" => "NVIDIA",
++            "apple" => "Apple",
++            _ => continue,
++        };
++        return Some(name.to_owned());
++    }
++    None
++}
+diff -ruN a/src/ui/pages/gpu.rs b/src/ui/pages/gpu.rs
+--- a/src/ui/pages/gpu.rs	2026-09-14 20:29:57.000000000 +0800
++++ b/src/ui/pages/gpu.rs	2026-11-28 16:40:05.862261495 +0800
+@@ -246,8 +246,8 @@
+         imp.temperature.graph().set_locked_max_y(None);
+ 
+         imp.manufacturer.set_subtitle(
+-            &gpu.get_vendor()
+-                .map_or_else(|_| i18n("N/A"), |vendor| vendor.name().to_string()),
++            &gpu.vendor_display_name()
++                .map_or_else(|_| i18n("N/A"), |vendor| vendor),
+         );
+ 
+         match gpu.gpu_identifier() {
