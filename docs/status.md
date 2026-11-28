@@ -20,6 +20,8 @@ SunUEFI-miro 面向 Redmi K80 Pro（`miro`，SM8750）独立维护。当前实�
 
 熄屏功耗未能量化：拔掉充电器、仅走 Wi-Fi 的实测里，亮屏空闲 ≈−358 mA、熄屏 ≈−310 mA，而关掉 Wi-Fi 后仍 ≈−311 mA、恢复后 ≈−305 mA —— 三者几乎相同，说明 `bq27z561` 的 `current_now` 是平滑/滞后值，分钟级采样分辨不出亮屏、熄屏、Wi-Fi 开关之间几十 mA 的差别。这 ≈300 mA 是"Linux 桌面运行、SoC 未深度休眠"的基线，不是待机值。要判定 #98 保持 DSI/PHY 与面板供电的增量成本，只能用小时级 A/B 电量曲线（两配置各 ≥30 分钟）或外接电流表；短时实验不足以支撑结论。
 
+DSI resume 根因未解决（2026-11-28 三次对照实验）：目标是去掉 #97 的 runtime-PM 持有、让链路正常掉电。去掉持有后问题可稳定复现——首条 DCS 命令成功并收到 `CMD_DMA_DONE`，后续命令 `STATUS0 = ENGINE_BUSY｜DMA_BUSY`、`irq_total` 停止增长，引擎永久忙。主机寄存器软复位无效果（重试仍 `-ETIMEDOUT`）；把 host 与 PHY 完整断电重上电后引擎状态变干净（`STATUS0=0`），但 `CLK_STATUS` 出现 `DSI_CLK_STATUS_PLL_UNLOCKED`（bit16），链路仍无时钟、命令依旧发不出去。另发现去掉 PM 持有后连冷启动的面板初始化（t≈10 s）都会踩到，说明 DSI 在 probe 与面板使能之间就会 runtime-suspend。因此 #98 的"熄屏期间保持链路供电"保留为最终方案；继续推进需要 PHY PLL 在软件上电后的重新锁定时序资料。诊断探针与实验改动保存在会话工作区 `work/screen/dsi-resume-wedge-diag.patch`。
+
 桌面应用补丁的构建与解析测试不能代替真机界面验证。
 
 Resources 的 GPU 项为 N/A 的原因（2026-11-28 实机核对）：`/sys/class/drm/card1/device` 在 msm 上是**显示控制器**（`msm_dpu`，compatible `qcom,sm8750-dpu`），不是 PCI GPU，因此 `OtherGpu::name()` 走的 `Device::name()` 取不到名字；该节点下也没有 hwmon，温度、功耗、频率、VRAM 相应为 N/A。DT 中 GPU 节点为 `soc@0/gpu@3d00000`（`qcom,adreno-44050001`、`#cooling-cells = <2>`、phandle 347），但本平台没有任何 thermal zone 的 cooling-device 引用该 phandle，现有 `platform::node_thermal_paths()` 因此返回空，回落到不存在的 hwmon。真实可用的数据是 `/sys/class/devfreq/3d00000.gpu`（频率）与 `gpuss0`–`gpuss7` 温区。
