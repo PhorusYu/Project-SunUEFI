@@ -9,7 +9,7 @@ SunUEFI-miro 面向 Redmi K80 Pro（`miro`，SM8750）独立维护。当前实�
 | 图形加速 | Adreno 830、Mesa 27 与 GNOME Wayland 可用 |
 | 内核身份与 RTC | #98 的 `uname` 为 `7.3.3-miro-sunuefi+`；RTC `hctosys=1`，系统日期已校正至 2026-11-28 |
 | CPU boost | 内核 `/sys/devices/system/cpu/cpufreq/boost=1`；仅确认接口开启，未据此宣称性能提升 |
-| 桌面型号与温度 | GTK 修复包已构建并通过包与库接口检查；Resources 安装包已构建，补丁测试和整应用编译通过；设置应用修复包也已构建并通过包检查；GTK/Resources/设置包已安装；renderer helper 返回 Adreno 830v1，但设置界面尚未目视确认，Resources 的 GPU 名称仍可能为 N/A |
+| 桌面型号与温度 | GTK 修复包已构建并通过包与库接口检查；Resources 安装包已构建，补丁测试和整应用编译通过；设置应用修复包也已构建并通过包检查；GTK/Resources/设置包已安装；设置 → 关于已实机目视确认正常（机型与 CPU 名称正确），Resources 的 GPU 项仍为 N/A（原因见下方说明） |
 | 网络 | WCN7861 Wi-Fi、蓝牙及 USB NCM 网络可用；蓝牙 UART 为 3.2 Mbps，A2DP 播放可用 |
 | 内置扬声器 | TFA9865 双扬声器左右声道清晰播放，音量调节可用 |
 | 内置麦克风 | WCD9395 双麦录音可用，GNOME 提供一个内置麦入口，语音试听清楚 |
@@ -20,7 +20,9 @@ SunUEFI-miro 面向 Redmi K80 Pro（`miro`，SM8750）独立维护。当前实�
 
 熄屏功耗未能量化：拔掉充电器、仅走 Wi-Fi 的实测里，亮屏空闲 ≈−358 mA、熄屏 ≈−310 mA，而关掉 Wi-Fi 后仍 ≈−311 mA、恢复后 ≈−305 mA —— 三者几乎相同，说明 `bq27z561` 的 `current_now` 是平滑/滞后值，分钟级采样分辨不出亮屏、熄屏、Wi-Fi 开关之间几十 mA 的差别。这 ≈300 mA 是"Linux 桌面运行、SoC 未深度休眠"的基线，不是待机值。要判定 #98 保持 DSI/PHY 与面板供电的增量成本，只能用小时级 A/B 电量曲线（两配置各 ≥30 分钟）或外接电流表；短时实验不足以支撑结论。
 
-桌面应用补丁的构建与解析测试不能代替真机界面验证；当前不宣称型号和温度界面已修复。
+桌面应用补丁的构建与解析测试不能代替真机界面验证。
+
+Resources 的 GPU 项为 N/A 的原因（2026-11-28 实机核对）：`/sys/class/drm/card1/device` 在 msm 上是**显示控制器**（`msm_dpu`，compatible `qcom,sm8750-dpu`），不是 PCI GPU，因此 `OtherGpu::name()` 走的 `Device::name()` 取不到名字；该节点下也没有 hwmon，温度、功耗、频率、VRAM 相应为 N/A。DT 中 GPU 节点为 `soc@0/gpu@3d00000`（`qcom,adreno-44050001`、`#cooling-cells = <2>`、phandle 347），但本平台没有任何 thermal zone 的 cooling-device 引用该 phandle，现有 `platform::node_thermal_paths()` 因此返回空，回落到不存在的 hwmon。真实可用的数据是 `/sys/class/devfreq/3d00000.gpu`（频率）与 `gpuss0`–`gpuss7` 温区。按项目既定规则（不硬编码 GPU 名称，renderer 以 Mesa/GTK EGL helper 为准），要补齐需另做一版 Resources 补丁：名称取 GL renderer，频率取 devfreq，温度需为 GPU 与 `gpuss*` 温区建立可解释的对应关系；本次未改动。
 
 UEFI 构建对照（2026-11-28 实测）：优化 RELEASE 镜像用 `fastboot boot` 临时启动时报 `Synchronous Exception`，未进桌面；同源码仅把 SimpleInit 改为 NOOPT 的镜像（`outputs/miro-uefi-noopt/MiroUEFI-product.img`，28,901,376 字节，SHA256 `f8eb8fc82920705541d9acf9687957d3bee14230ac1ab78152284fa5b4ecd82f`）发送 0.9 秒、12 秒进入 Linux，本次启动显示报错为 0。因此该崩溃属于优化暴露的问题，不是源码逻辑或硬件故障；NOOPT 镜像可作为兜底，但未写入 `boot_a`（安装的稳定镜像未改动）。同一 NOOPT 镜像下 GUI 详情的帧率读数仍为 0–1 fps，说明帧率问题是 GUI pump/渲染实现本身而非优化等级；实机评估为"勉强可接受"，暂不作为缺陷跟踪。
 
