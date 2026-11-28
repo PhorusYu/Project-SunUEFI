@@ -18,6 +18,8 @@ SunUEFI-miro 面向 Redmi K80 Pro（`miro`，SM8750）独立维护。当前实�
 
 显示唤醒：DPMS 熄屏后黑屏已定位并修复，待观察熄屏功耗后再定稿。机制摘要：唤醒时若 DSI 控制器刚从 runtime-suspend 恢复（`DSI power-on runtime PM ret=0`），首条 DCS 命令的 DMA 永不完成（`STATUS0=0x3`、无 `DMA_DONE`、DSI IRQ 计数不动），面板初始化随之中止，并连带 REGDMA、frame done、kickoff 超时；把 DSI 与 PHY 保持在 runtime-active 后该路径不再出现。另一处问题是每次 unprepare 都复位并全量初始化面板，面板帧存被清空，唤醒后有数秒全屏花屏；改为熄屏只发 `0x28` 并把 DBV 归零、亮屏只发 `0x29` 后消失。背光/DBV 通路本身正常且线性（15 极暗、1149 明显可见、4095 最亮）。#98 实机按电源键熄屏 3 秒再亮屏，直接回到原画面，无花屏、无内核显示报错。补丁与当前面板驱动副本见 `tools/patches/display/`。遗留：link 与面板供电轨在熄屏期间保持供电，需实测待机功耗并确认是否收敛为"仅在 unprepare 与下次 prepare 之间持有"；面板不再进入 sleep-in（`0x10`）。
 
+熄屏功耗未能量化：拔掉充电器、仅走 Wi-Fi 的实测里，亮屏空闲 ≈−358 mA、熄屏 ≈−310 mA，而关掉 Wi-Fi 后仍 ≈−311 mA、恢复后 ≈−305 mA —— 三者几乎相同，说明 `bq27z561` 的 `current_now` 是平滑/滞后值，分钟级采样分辨不出亮屏、熄屏、Wi-Fi 开关之间几十 mA 的差别。这 ≈300 mA 是"Linux 桌面运行、SoC 未深度休眠"的基线，不是待机值。要判定 #98 保持 DSI/PHY 与面板供电的增量成本，只能用小时级 A/B 电量曲线（两配置各 ≥30 分钟）或外接电流表；短时实验不足以支撑结论。
+
 桌面应用补丁的构建与解析测试不能代替真机界面验证；当前不宣称型号和温度界面已修复。
 
 UEFI 构建对照（2026-11-28 实测）：优化 RELEASE 镜像用 `fastboot boot` 临时启动时报 `Synchronous Exception`，未进桌面；同源码仅把 SimpleInit 改为 NOOPT 的镜像（`outputs/miro-uefi-noopt/MiroUEFI-product.img`，28,901,376 字节，SHA256 `f8eb8fc82920705541d9acf9687957d3bee14230ac1ab78152284fa5b4ecd82f`）发送 0.9 秒、12 秒进入 Linux，本次启动显示报错为 0。因此该崩溃属于优化暴露的问题，不是源码逻辑或硬件故障；NOOPT 镜像可作为兜底，但未写入 `boot_a`（安装的稳定镜像未改动）。同一 NOOPT 镜像下 GUI 详情的帧率读数仍为 0–1 fps，说明帧率问题是 GUI pump/渲染实现本身而非优化等级；实机评估为"勉强可接受"，暂不作为缺陷跟踪。
