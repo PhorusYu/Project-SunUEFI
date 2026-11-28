@@ -1,0 +1,20 @@
+{
+  "versions": [
+    "51.0+ds"
+  ],
+  "schema_version": 1,
+  "patches": [
+    {
+      "upstream": {
+        "url": "https://gitlab.gnome.org/GNOME/Incubator/resources",
+        "drop_when": "Resources reads ARM SoC names and temperatures through the standard SoC, DRM and thermal interfaces.",
+        "status": "downstream"
+      },
+      "sha256": "97e5c8468b33d8374af907ff8088119daf02b981f0b8747d10972c472a6114c2",
+      "file": "0001-platform-cpu-and-thermal-sensors.patch"
+    }
+  ],
+  "targets": [
+    "debian-gnome"
+  ]
+}

@@ -1,0 +1,461 @@
+Description: Read platform CPU information and associated thermal sensors
+Origin: vendor, https://gitlab.gnome.org/GNOME/Incubator/resources
+Forwarded: no
+
+diff --git a/src/devices/mod.rs b/src/devices/mod.rs
+--- a/src/devices/mod.rs
++++ b/src/devices/mod.rs
+@@ -9,3 +9,4 @@
+ pub mod npu;
+ pub mod pci;
+ pub mod process;
++mod platform;
+diff --git a/src/devices/cpu.rs b/src/devices/cpu.rs
+--- a/src/devices/cpu.rs
++++ b/src/devices/cpu.rs
+@@ -8,6 +8,7 @@
+     sync::LazyLock,
+ };
+ 
++use super::platform;
+ use crate::utils::read_parsed;
+ 
+ const PROC_STAT: &str = "/proc/stat";
+@@ -33,12 +34,17 @@
+ static RE_PROC_STAT: Lazy<Regex> = lazy_regex!(
+     r"cpu\d+ *(?P<user>\d*) *(?P<nice>\d*) *(?P<system>\d*) *(?P<idle>\d*) *(?P<iowait>\d*) *(?P<irq>\d*) *(?P<softirq>\d*) *(?P<steal>\d*) *(?P<guest>\d*) *(?P<guest_nice>\d*)"
+ );
++
++static ARM_CPU_TEMPERATURE_PATHS: LazyLock<Vec<PathBuf>> =
++    LazyLock::new(|| platform::cpu_thermal_paths(Path::new("/sys/class/thermal")));
+ 
+ static CPU_TEMPERATURE_PATH: LazyLock<Option<PathBuf>> = LazyLock::new(|| {
+     search_for_hwmons(KNOWN_HWMONS)
+         .or_else(|| search_for_thermal_zones(KNOWN_THERMAL_ZONES))
+         .or_else(|| {
+-            warn!("No CPU temperature sensor found!");
++            if ARM_CPU_TEMPERATURE_PATHS.is_empty() {
++                warn!("No CPU temperature sensor found!");
++            }
+             None
+         })
+ });
+@@ -255,7 +261,12 @@
+                 .stdout,
+         )
+         .context("unable to parse lscpu output to UTF-8")
+-        .map(Self::parse_lscpu)
++        .map(|output| {
++            let mut info = Self::parse_lscpu(output);
++            info.model_name =
++                platform::cpu_model_name(info.model_name, Path::new("/sys/bus/soc/devices"));
++            info
++        })
+     }
+ }
+ 
+@@ -343,11 +354,16 @@
+ ///
+ /// Will return `Err` if there was no way to read the CPU temperature.
+ pub fn get_temperature() -> Result<f32> {
+-    if let Some(path) = CPU_TEMPERATURE_PATH.as_ref() {
+-        read_sysfs_thermal(path)
+-    } else {
+-        bail!("no CPU temperature sensor found")
+-    }
++    let known = CPU_TEMPERATURE_PATH
++        .as_ref()
++        .and_then(|path| read_sysfs_thermal(path).ok())
++        .filter(|value| value.is_finite());
++    let arm = platform::highest_temperature(&ARM_CPU_TEMPERATURE_PATHS).map(|value| value as f32);
++    known
++        .into_iter()
++        .chain(arm)
++        .max_by(f32::total_cmp)
++        .context("no readable CPU temperature sensor found")
+ }
+ 
+ fn read_sysfs_thermal<P: AsRef<Path>>(path: P) -> Result<f32> {
+diff --git a/src/devices/gpu/other.rs b/src/devices/gpu/other.rs
+--- a/src/devices/gpu/other.rs
++++ b/src/devices/gpu/other.rs
+@@ -1,9 +1,13 @@
+ use anyhow::{Result, bail};
+ use process_data::gpu_usage::GpuIdentifier;
+ 
+-use std::path::{Path, PathBuf};
++use std::{
++    fs::File,
++    os::fd::AsRawFd,
++    path::{Path, PathBuf},
++};
+ 
+-use crate::devices::pci::Device;
++use crate::devices::{pci::Device, platform};
+ 
+ use super::GpuImpl;
+ 
+@@ -15,17 +19,33 @@
+     pub driver: String,
+     sysfs_path: PathBuf,
+     first_hwmon_path: Option<PathBuf>,
++    thermal_paths: Vec<PathBuf>,
+ }
+ 
+ impl OtherGpu {
+-    pub const fn new(
++    pub fn new(
+         device: Option<&'static Device>,
+         gpu_identifier: GpuIdentifier,
+         driver: String,
+         sysfs_path: PathBuf,
+         first_hwmon_path: Option<PathBuf>,
+     ) -> Self {
++        let mut thermal_paths = platform::device_thermal_paths(
++            &sysfs_path.join("device"),
++            Path::new("/sys/firmware/devicetree/base"),
++            Path::new("/sys/class/thermal"),
++        );
++        if thermal_paths.is_empty() && matches!(driver.as_str(), "msm" | "msm_dpu" | "adreno") {
++            if let Some(chip_id) = msm_chip_id(&sysfs_path) {
++                let tree = Path::new("/sys/firmware/devicetree/base");
++                if let Some(node) = platform::adreno_node(tree, chip_id) {
++                    thermal_paths =
++                        platform::node_thermal_paths(&node, tree, Path::new("/sys/class/thermal"));
++                }
++            }
++        }
+         Self {
++            thermal_paths,
+             device,
+             gpu_identifier,
+             driver,
+@@ -33,6 +53,41 @@
+             first_hwmon_path,
+         }
+     }
++}
++
++fn msm_chip_id(card: &Path) -> Option<u32> {
++    #[repr(C)]
++    struct MsmParam {
++        pipe: u32,
++        param: u32,
++        value: u64,
++        len: u32,
++        pad: u32,
++    }
++    // DRM_IOCTL_MSM_GET_PARAM: read-only msm_drm.h UAPI, not DRM master-only.
++    let request = ((3u32 << 30) | (24 << 16) | ((b'd' as u32) << 8) | 0x40) as libc::c_ulong;
++    let entries = std::fs::read_dir(card.join("device/drm")).ok()?;
++    for entry in entries.flatten() {
++        let name = entry.file_name();
++        if !name.to_string_lossy().starts_with("renderD") {
++            continue;
++        }
++        let Ok(file) = File::open(Path::new("/dev/dri").join(name)) else {
++            continue;
++        };
++        let mut param = MsmParam {
++            pipe: 0x10,
++            param: 0x03,
++            value: 0,
++            len: 0,
++            pad: 0,
++        };
++        // SAFETY: the descriptor is live and param has the exact kernel UAPI layout.
++        if unsafe { libc::ioctl(file.as_raw_fd(), request, &mut param) } == 0 {
++            return Some(param.value as u32);
++        }
++    }
++    None
+ }
+ 
+ impl GpuImpl for OtherGpu {
+@@ -85,7 +140,8 @@
+     }
+ 
+     fn temperature(&self) -> Result<f64> {
+-        self.hwmon_temperature()
++        platform::highest_temperature(&self.thermal_paths)
++            .map_or_else(|| self.hwmon_temperature(), Ok)
+     }
+ 
+     fn power_usage(&self) -> Result<f64> {
+diff --git a/src/devices/platform.rs b/src/devices/platform.rs
+new file mode 100644
+--- /dev/null
++++ b/src/devices/platform.rs
+@@ -0,0 +1,272 @@
++//! Platform information exposed by the Linux SoC and thermal subsystems.
++
++use std::{
++    fs,
++    path::{Path, PathBuf},
++};
++
++pub fn cpu_model_name(existing: Option<String>, soc_root: &Path) -> Option<String> {
++    existing
++        .filter(|name| !name.trim().is_empty())
++        .or_else(|| soc_model_name(soc_root))
++}
++
++pub fn soc_model_name(root: &Path) -> Option<String> {
++    let mut devices: Vec<_> = fs::read_dir(root)
++        .ok()?
++        .flatten()
++        .map(|entry| entry.path())
++        .collect();
++    devices.sort();
++    for device in devices {
++        let machine = fs::read_to_string(device.join("machine")).ok();
++        let Some(machine) = machine
++            .as_deref()
++            .map(str::trim)
++            .filter(|name| !name.is_empty())
++        else {
++            continue;
++        };
++        let family = fs::read_to_string(device.join("family")).unwrap_or_default();
++        let family = family.trim();
++        return Some(if family.is_empty() || machine.contains(family) {
++            machine.to_owned()
++        } else {
++            format!("{family} {machine}")
++        });
++    }
++    None
++}
++
++pub fn cpu_thermal_paths(root: &Path) -> Vec<PathBuf> {
++    let Ok(zones) = fs::read_dir(root) else {
++        return Vec::new();
++    };
++    zones
++        .flatten()
++        .filter_map(|zone| {
++            let path = zone.path();
++            let name = fs::read_to_string(path.join("type")).ok()?;
++            let name = name.trim();
++            (name.starts_with("cpu-") && name.ends_with("thermal")).then(|| path.join("temp"))
++        })
++        .collect()
++}
++
++pub fn highest_temperature(paths: &[PathBuf]) -> Option<f64> {
++    paths
++        .iter()
++        .filter_map(|path| {
++            let value = fs::read_to_string(path).ok()?.trim().parse::<f64>().ok()?;
++            value.is_finite().then_some(value / 1000.0)
++        })
++        .max_by(f64::total_cmp)
++}
++
++fn read_cells(path: &Path) -> Option<Vec<u32>> {
++    let bytes = fs::read(path).ok()?;
++    if bytes.len() % 4 != 0 {
++        return None;
++    }
++    Some(
++        bytes
++            .chunks_exact(4)
++            .map(|cell| u32::from_be_bytes(cell.try_into().unwrap()))
++            .collect(),
++    )
++}
++
++fn targets_device(map: &Path, phandle: u32) -> bool {
++    let Some(cells) = read_cells(&map.join("cooling-device")) else {
++        return false;
++    };
++    // The thermal binding specifies two cooling state arguments per provider.
++    cells.len() % 3 == 0 && cells.chunks_exact(3).any(|entry| entry[0] == phandle)
++}
++
++/// Match thermal zones through their cooling-device phandle, never through a GPU name.
++pub fn device_thermal_paths(device: &Path, device_tree: &Path, thermal: &Path) -> Vec<PathBuf> {
++    node_thermal_paths(&device.join("of_node"), device_tree, thermal)
++}
++
++/// An MSM DRM master may be the display controller, while its GPU is a component.
++/// Match the GPU's kernel-reported chip ID instead of assuming a global GPU sensor.
++pub fn adreno_node(root: &Path, chip_id: u32) -> Option<PathBuf> {
++    fn visit(root: &Path, compatible: &[u8], found: &mut Vec<PathBuf>) {
++        if fs::read(root.join("compatible")).is_ok_and(|bytes| {
++            bytes
++                .split(|byte| *byte == 0)
++                .any(|entry| entry == compatible)
++        }) {
++            let enabled = fs::read(root.join("status")).map_or(true, |value| {
++                value
++                    .split(|byte| *byte == 0)
++                    .next()
++                    .is_some_and(|status| status == b"okay" || status == b"ok")
++            });
++            if enabled {
++                found.push(root.to_owned());
++            }
++        }
++        if let Ok(entries) = fs::read_dir(root) {
++            for entry in entries.flatten() {
++                if entry.file_type().is_ok_and(|kind| kind.is_dir()) {
++                    visit(&entry.path(), compatible, found);
++                }
++            }
++        }
++    }
++    let compatible = format!("qcom,adreno-{chip_id:08x}");
++    let mut found = Vec::new();
++    visit(root, compatible.as_bytes(), &mut found);
++    (found.len() == 1).then(|| found.remove(0))
++}
++
++pub fn node_thermal_paths(node: &Path, device_tree: &Path, thermal: &Path) -> Vec<PathBuf> {
++    if read_cells(&node.join("#cooling-cells")).as_deref() != Some(&[2]) {
++        return Vec::new();
++    }
++    let Some(phandle) = read_cells(&node.join("phandle"))
++        .or_else(|| read_cells(&node.join("linux,phandle")))
++        .and_then(|cells| (cells.len() == 1).then(|| cells[0]))
++    else {
++        return Vec::new();
++    };
++    let Ok(zones) = fs::read_dir(device_tree.join("thermal-zones")) else {
++        return Vec::new();
++    };
++    let mut names = Vec::new();
++    for zone in zones.flatten() {
++        let Ok(maps) = fs::read_dir(zone.path().join("cooling-maps")) else {
++            continue;
++        };
++        if maps
++            .flatten()
++            .any(|map| targets_device(&map.path(), phandle))
++        {
++            names.push(zone.file_name());
++        }
++    }
++    let Ok(zones) = fs::read_dir(thermal) else {
++        return Vec::new();
++    };
++    zones
++        .flatten()
++        .filter_map(|zone| {
++            let path = zone.path();
++            let name = fs::read_to_string(path.join("type")).ok()?;
++            names
++                .iter()
++                .any(|candidate| candidate == name.trim())
++                .then(|| path.join("temp"))
++        })
++        .collect()
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use std::time::{SystemTime, UNIX_EPOCH};
++
++    struct Fixture(PathBuf);
++    impl Fixture {
++        fn new() -> Self {
++            let stamp = SystemTime::now()
++                .duration_since(UNIX_EPOCH)
++                .unwrap()
++                .as_nanos();
++            let path = std::env::temp_dir()
++                .join(format!("resources-platform-{}-{stamp}", std::process::id()));
++            fs::create_dir(&path).unwrap();
++            Self(path)
++        }
++        fn write(&self, path: &str, contents: impl AsRef<[u8]>) {
++            let path = self.0.join(path);
++            fs::create_dir_all(path.parent().unwrap()).unwrap();
++            fs::write(path, contents).unwrap();
++        }
++    }
++    impl Drop for Fixture {
++        fn drop(&mut self) {
++            fs::remove_dir_all(&self.0).unwrap();
++        }
++    }
++
++    #[test]
++    fn soc_name_requires_machine_and_preserves_family() {
++        let f = Fixture::new();
++        f.write("soc/soc0/machine", "SM8750\n");
++        f.write("soc/soc0/family", "Snapdragon\n");
++        assert_eq!(
++            soc_model_name(&f.0.join("soc")).as_deref(),
++            Some("Snapdragon SM8750")
++        );
++        assert_eq!(
++            cpu_model_name(Some("Qualcomm Oryon".into()), &f.0.join("soc")).as_deref(),
++            Some("Qualcomm Oryon")
++        );
++        f.write("soc/soc0/machine", "\n");
++        assert!(soc_model_name(&f.0.join("soc")).is_none());
++    }
++
++    #[test]
++    fn cpu_temperature_ignores_unrelated_and_invalid_sensors() {
++        let f = Fixture::new();
++        for (index, name, value) in [
++            (0, "cpu-0-0-0-thermal", "42000"),
++            (1, "cpu-1-0-0-thermal", "51000"),
++            (2, "gpuss0-thermal", "99000"),
++            (3, "cpu-0-1-0-thermal", "NaN"),
++        ] {
++            f.write(&format!("thermal/thermal_zone{index}/type"), name);
++            f.write(&format!("thermal/thermal_zone{index}/temp"), value);
++        }
++        assert_eq!(
++            highest_temperature(&cpu_thermal_paths(&f.0.join("thermal"))),
++            Some(51.0)
++        );
++    }
++
++    #[test]
++    fn gpu_temperature_requires_a_matching_cooling_phandle() {
++        let f = Fixture::new();
++        f.write("gpu/of_node/phandle", 0x123u32.to_be_bytes());
++        f.write("gpu/of_node/#cooling-cells", 2u32.to_be_bytes());
++        f.write(
++            "dt/thermal-zones/gpuss0-thermal/cooling-maps/map0/cooling-device",
++            [0x123u32, u32::MAX, u32::MAX]
++                .into_iter()
++                .flat_map(u32::to_be_bytes)
++                .collect::<Vec<_>>(),
++        );
++        f.write("thermal/thermal_zone0/type", "gpuss0-thermal\n");
++        f.write("thermal/thermal_zone0/temp", "48000\n");
++        f.write("thermal/thermal_zone1/type", "gpuss1-thermal\n");
++        f.write("thermal/thermal_zone1/temp", "99000\n");
++        let paths = device_thermal_paths(&f.0.join("gpu"), &f.0.join("dt"), &f.0.join("thermal"));
++        assert_eq!(highest_temperature(&paths), Some(48.0));
++        f.write("gpu/of_node/phandle", 0x456u32.to_be_bytes());
++        assert!(
++            device_thermal_paths(&f.0.join("gpu"), &f.0.join("dt"), &f.0.join("thermal"))
++                .is_empty()
++        );
++    }
++
++    #[test]
++    fn adreno_component_requires_an_exact_unambiguous_chip_id() {
++        let f = Fixture::new();
++        f.write(
++            "dt/soc/gpu/compatible",
++            b"qcom,adreno-44050001\0qcom,adreno\0",
++        );
++        assert_eq!(
++            adreno_node(&f.0.join("dt"), 0x44050001),
++            Some(f.0.join("dt/soc/gpu"))
++        );
++        assert!(adreno_node(&f.0.join("dt"), 0x44050002).is_none());
++        f.write("dt/soc/gpu2/compatible", b"qcom,adreno-44050001\0");
++        assert!(adreno_node(&f.0.join("dt"), 0x44050001).is_none());
++        f.write("dt/soc/gpu2/status", b"disabled\0");
++        assert!(adreno_node(&f.0.join("dt"), 0x44050001).is_some());
++    }
++}

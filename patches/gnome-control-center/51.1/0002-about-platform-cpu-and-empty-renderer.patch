@@ -1,0 +1,78 @@
+Description: Use SoC information when CPU model names are absent and reject an empty session renderer
+Origin: vendor, https://gitlab.gnome.org/GNOME/gnome-control-center
+Forwarded: no
+
+--- a/panels/system/about/cc-about-page.c
++++ b/panels/system/about/cc-about-page.c
+@@ -170,6 +170,9 @@
+ 
+     renderer = info_cleanup (g_variant_get_string (renderer_variant, NULL));
+ 
++    if (renderer != NULL && *g_strstrip (renderer) == '\0')
++        g_clear_pointer (&renderer, g_free);
++
+     return renderer;
+ }
+ 
+@@ -527,6 +530,38 @@
+     return g_strdup_printf ("%s %s", kernel_name, kernel_release);
+ }
+ 
++static char *
++get_soc_cpu_info (void)
++{
++    g_autoptr(GDir) dir = NULL;
++    const char *entry;
++
++    dir = g_dir_open ("/sys/bus/soc/devices", 0, NULL);
++    if (dir == NULL)
++        return NULL;
++
++    while ((entry = g_dir_read_name (dir)) != NULL) {
++        g_autofree char *machine_path = NULL;
++        g_autofree char *family_path = NULL;
++        g_autofree char *machine = NULL;
++        g_autofree char *family = NULL;
++
++        machine_path = g_build_filename ("/sys/bus/soc/devices", entry, "machine", NULL);
++        if (!g_file_get_contents (machine_path, &machine, NULL, NULL) ||
++            *g_strstrip (machine) == '\0')
++            continue;
++
++        family_path = g_build_filename ("/sys/bus/soc/devices", entry, "family", NULL);
++        if (g_file_get_contents (family_path, &family, NULL, NULL) &&
++            *g_strstrip (family) != '\0' && strstr (machine, family) == NULL)
++            return g_strdup_printf ("%s %s", family, machine);
++
++        return g_steal_pointer (&machine);
++    }
++
++    return NULL;
++}
++
+ char *
+ get_cpu_info ()
+ {
+@@ -553,7 +588,7 @@
+             model = g_hash_table_lookup (info->cpuinfo[i].values, keys[j]);
+         }
+ 
+-        if (model == NULL)
++        if (model == NULL || *model == '\0')
+             continue;
+ 
+         count = g_hash_table_lookup (counts, model);
+@@ -577,6 +612,13 @@
+             g_string_append_printf (cpu, "%s \303\227 %d", cleanedup, count);
+         else
+             g_string_append_printf (cpu, "%s", cleanedup);
++    }
++
++    if (cpu->len == 0)
++    {
++        char *soc = get_soc_cpu_info ();
++        if (soc != NULL)
++            return soc;
+     }
+ 
+     return g_strdup (cpu->str);

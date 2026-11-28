@@ -1,0 +1,51 @@
+Description: Check graphics context realization and report errors when renderer queries fail
+Origin: vendor, https://gitlab.gnome.org/GNOME/gnome-control-center
+Forwarded: no
+
+--- a/panels/system/about/gnome-control-center-print-renderer.c
++++ b/panels/system/about/gnome-control-center-print-renderer.c
+@@ -31,7 +31,8 @@
+     GdkSurface *surface;
+     GtkNative *native;
+     GtkWidget *win;
+-    GdkGLContext *context;
++    g_autoptr(GdkGLContext) context = NULL;
++    g_autoptr(GError) error = NULL;
+     g_autofree char *renderer = NULL;
+     g_autofree char *gl_version = NULL;
+ 
+@@ -39,14 +40,31 @@
+     gtk_widget_realize (win);
+     native = gtk_widget_get_native (win);
+     surface = gtk_native_get_surface (native);
+-    context = gdk_surface_create_gl_context (surface, NULL);
+-    if (!context)
++    context = gdk_surface_create_gl_context (surface, &error);
++    if (!context) {
++        g_warning ("Failed to create graphics context: %s", error->message);
++        gtk_window_destroy (GTK_WINDOW (win));
+         return NULL;
++    }
++    if (!gdk_gl_context_realize (context, &error)) {
++        g_warning ("Failed to realize graphics context: %s", error->message);
++        gtk_window_destroy (GTK_WINDOW (win));
++        return NULL;
++    }
+     gdk_gl_context_make_current (context);
++    if (gdk_gl_context_get_current () != context) {
++        g_warning ("Unable to make graphics context current");
++        gtk_window_destroy (GTK_WINDOW (win));
++        return NULL;
++    }
+     renderer = g_strdup ((char *) glGetString (GL_RENDERER));
+     gl_version = g_strdup ((char *) glGetString (GL_VERSION));
+     gdk_gl_context_clear_current ();
+-    g_object_unref (context);
++    gtk_window_destroy (GTK_WINDOW (win));
++    if (renderer == NULL || *renderer == '\0' || gl_version == NULL) {
++        g_warning ("Graphics context returned no renderer or GL version");
++        return NULL;
++    }
+ 
+     if (strstr (gl_version, "NVIDIA") != NULL) {
+         const char *glvnd_libname = g_getenv ("__GLX_VENDOR_LIBRARY_NAME");

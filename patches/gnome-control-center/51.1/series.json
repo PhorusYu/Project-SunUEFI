@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "versions": [
+    "51.1"
+  ],
+  "targets": [
+    "debian-gnome"
+  ],
+  "patches": [
+    {
+      "file": "../51.0/0001-users-wait-for-verification-before-enrolling.patch",
+      "sha256": "77c25d89c145dcbfcda69e7dea9ce981c2d7a76044c90cf5b640f699e9211bd0",
+      "upstream": {
+        "status": "downstream",
+        "url": "https://gitlab.gnome.org/GNOME/gnome-control-center/-/commit/44926f54b5427f8c16d8fe0a30e95d1d4384c34b",
+        "drop_when": "GNOME Settings waits for fprintd to stop verification before starting another enrollment."
+      }
+    },
+    {
+      "file": "0002-about-platform-cpu-and-empty-renderer.patch",
+      "sha256": "112255385d1540ea82efcc779931ba6d89f588cc96d8ed4a259fea040cf62f64",
+      "upstream": {
+        "status": "downstream",
+        "url": "https://gitlab.gnome.org/GNOME/gnome-control-center",
+        "drop_when": "Use SoC information when CPU model names are absent and reject an empty session renderer."
+      }
+    },
+    {
+      "file": "0003-about-check-GL-context-and-renderer-results.patch",
+      "sha256": "9684e27e80d3f6f9060f4a72d2d38ffcc1e045980870e3bdd0cd3b52722457d9",
+      "upstream": {
+        "status": "downstream",
+        "url": "https://gitlab.gnome.org/GNOME/gnome-control-center",
+        "drop_when": "Check graphics context realization and report errors when renderer queries fail."
+      }
+    }
+  ]
+}

@@ -1,7 +1,13 @@
 {
   "schema_version": 1,
-  "versions": ["51.0", "51.1"],
-  "targets": ["debian-gnome", "nyarch-gnome"],
+  "versions": [
+    "51.0",
+    "51.1"
+  ],
+  "targets": [
+    "debian-gnome",
+    "nyarch-gnome"
+  ],
   "sources": {
     "51.0": {
       "url": "https://download.gnome.org/sources/gnome-settings-daemon/51/gnome-settings-daemon-51.0.tar.xz",
@@ -38,6 +44,15 @@
         "status": "downstream",
         "url": "https://github.com/Cryolitia-Forks/Project-SunUEFI/tree/main/patches/gnome-settings-daemon",
         "drop_when": "The selected GSD source queries GetActive before configuring idle and monitor power, preserving the display state when that query fails."
+      }
+    },
+    {
+      "file": "0003-media-keys-add-blank-power-button-action.patch",
+      "sha256": "b9c55150d535e6fb8646a45bd582d5c75a3b8f3a87195a0f100ce68f660320c5",
+      "upstream": {
+        "status": "downstream",
+        "url": "https://github.com/PhorusYu/SunUEFI-miro",
+        "drop_when": "GSD provides a display-only power-button action that toggles Mutter display power without suspending the system."
       }
     }
   ]

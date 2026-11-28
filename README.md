@@ -9,13 +9,18 @@
 - **合体 BOOT + Android 引导助手**：通过 `SUNUEFI-SPLITv1` 无损重打包 `boot_a`（保留原厂 Android 内核、`recovery` 与 `vbmeta`），配合 Magisk / KernelSU 模块 WebUI 实现脱离电脑独立双系统启动。
 - **UEFI 启动链**：`MiroUEFI`（SimpleInit 菜单 + 持久变量）→ `systemd-boot`（`sunuefi_esp`）→ Linux `7.3.3`（`sunuefi_root`）。
 - **120Hz 原生显示**：`xiaomi,miro-o11u`（`o11u_42_02_0a_dsc_cmd`，1440×3200 @ 120Hz）+ DPU DSC 1.2（`DRM_DSC_1_2_444`）+ TE 同步（`gpio86`）+ 屏幕背光亮度调节，桌面与 `kmscube` 无花屏。
-- **屏幕触控**：FocalTech FT3683 SPI 10 点触控（`focaltech_ft3683_spi`，`gpi_dma1` + `vreg_l12b_1p8` 供电）。
+- **屏幕触控**：实机确认 FocalTech FT3683 SPI 10 点触控（`focaltech_ft3683_spi`，`gpi_dma1` + `vreg_l12b_1p8` 供电）。
+- **内核身份、时钟与 CPU**：`uname` 已显示 `miro-sunuefi`；RTC 开机校时正常（`hctosys=1`），CPU boost 接口已开启（`boost=1`）。
 - **物理按键**：电源键（`pmic_pwrkey`）、音量下键（`pmic_resin`）、音量上键（`gpio-keys` / `pm8550-gpio 6`）。
 - **Adreno 830 GPU**：加载 `gen80000_zap.mbn` + GMU `v5.1.25`，搭配 Mesa 27（Freedreno OpenGL 4.6 / Turnip Vulkan 1.4），Wayland GNOME 与 Firefox WebGL 硬件加速正常。
 - **Wi-Fi 7、蓝牙与 USB NCM**：WCN7861 Wi-Fi 7（`ath12k` `peach hw2.0` + AOSS PDC 投票，支持固定原厂 MAC）、WCN7861 蓝牙（`qcom,wcn7861-bt` + `miro-bt-setup.service`）与 USB NCM（`eusb2-repeater` + `udhcpd`）可用。
 - **内置扬声器与麦克风**：TFA9865 双扬声器左右声道播放、WCD9395 内置双麦录音及 USB-C 耳机播放正常；通过 ALSA UCM2 / PipeWire 在 GNOME 中使用。蓝牙 UART 使用 3.2 Mbps，保留 A2DP 播放。
 - **电池电量与安全 5V 充电**：`bq27z561-0` 独立电量计 + `miro-adsp.service`（ADSP `charger_pd`）+ `miro_mca` 安全 5V 普通充电控制（支持 SDP/CDP/DCP/PD 限流、`4400 mV` 恒压、温度/电压保护及 `charge_behaviour`）。
 - **无损双系统分区**：基于 `piano-resize-f2fs` 与 `piano-storage` 无损收缩 `userdata`，建立 `sunuefi_esp`（512 MiB）与 `sunuefi_root`（`LABEL=PIANOROOT`）。
+
+已知显示问题：Linux 熄屏（DPMS）后唤醒可能保持黑屏；实机曾通过完整关机后重新启动恢复显示。当前不视为熄屏唤醒已解决。
+
+桌面硬件信息修复：GTK `4.24.1+ds-1+sunuefi1` 安装包已构建并通过包与库接口检查；Resources `51.0+ds-3+sunuefi1` 安装包也已构建，CPU 名称和 CPU/GPU 温度补丁通过解析测试及整应用编译检查。设置应用 `1:51.1-2+sunuefi1` 安装包也已构建并通过包检查；GTK、Resources 与设置应用修复包已安装到手机；GNOME Control Center 的 GTK renderer helper 已实际返回 `Adreno (TM) 830v1`。实体设置界面尚未目视复核，Resources GPU 名称仍可能显示 N/A。
 
 ## 仓库核心目录
 

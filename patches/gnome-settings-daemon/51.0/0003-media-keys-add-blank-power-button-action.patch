@@ -1,0 +1,63 @@
+From: PhorusYu <PhorusYu@users.noreply.github.com>
+Subject: [PATCH] media-keys: add a display-only power button action
+
+Append blank to the existing power button enum and toggle the standard
+Mutter display power property. Preserve existing settings and avoid system
+suspend for devices whose wake-up path is not ready. Ignore an unknown
+display state rather than guessing.
+
+diff --git a/data/gnome-settings-daemon/gsd-enums.h b/data/gnome-settings-daemon/gsd-enums.h
+index eea1fb1..7c9f859 100644
+--- a/data/gnome-settings-daemon/gsd-enums.h
++++ b/data/gnome-settings-daemon/gsd-enums.h
+@@ -107,7 +107,8 @@ typedef enum
+   GSD_POWER_BUTTON_ACTION_NOTHING,
+   GSD_POWER_BUTTON_ACTION_SUSPEND,
+   GSD_POWER_BUTTON_ACTION_HIBERNATE,
+-  GSD_POWER_BUTTON_ACTION_INTERACTIVE
++  GSD_POWER_BUTTON_ACTION_INTERACTIVE,
++  GSD_POWER_BUTTON_ACTION_BLANK
+ } GsdPowerButtonActionType;
+ 
+ typedef enum
+diff --git a/data/org.gnome.settings-daemon.plugins.power.gschema.xml.in b/data/org.gnome.settings-daemon.plugins.power.gschema.xml.in
+index 051bcf7..9106771 100644
+--- a/data/org.gnome.settings-daemon.plugins.power.gschema.xml.in
++++ b/data/org.gnome.settings-daemon.plugins.power.gschema.xml.in
+@@ -39,7 +39,7 @@
+     <key name="power-button-action" enum="org.gnome.settings-daemon.GsdPowerButtonActionType">
+       <default>'suspend'</default>
+       <summary>Power button action</summary>
+-      <description>The action to take when the system power button is pressed. Virtual machines only honor the 'nothing' action, and will shutdown otherwise. Tablets always suspend, ignoring all the other action options.</description>
++      <description>The action to take when the system power button is pressed. Virtual machines only honor the 'nothing' action, and will shutdown otherwise. The blank action toggles display power without suspending the system.</description>
+     </key>
+     <key name="power-saver-profile-on-low-battery" type="b">
+       <default>true</default>
+diff --git a/plugins/media-keys/gsd-media-keys-manager.c b/plugins/media-keys/gsd-media-keys-manager.c
+index 35d8ba4..ae04c55 100644
+--- a/plugins/media-keys/gsd-media-keys-manager.c
++++ b/plugins/media-keys/gsd-media-keys-manager.c
+@@ -2151,6 +2151,23 @@ do_config_power_button_action (GsdMediaKeysManager *manager,
+         }
+ 
+         switch (action_type) {
++        case GSD_POWER_BUTTON_ACTION_BLANK: {
++                g_autoptr(GsdDisplayConfig) display_config = NULL;
++                int mode;
++
++                display_config = gnome_settings_bus_get_display_config_proxy ();
++                if (display_config == NULL)
++                        return;
++
++                mode = gsd_display_config_get_power_save_mode (display_config);
++                /* An unknown display state must not trigger a blind toggle. */
++                if (mode < 0 || mode > 3)
++                        return;
++
++                gsd_display_config_set_power_save_mode (display_config,
++                                                       mode == 0 ? 3 : 0);
++                return;
++        }
+         case GSD_POWER_BUTTON_ACTION_SUSPEND:
+                 action = GSD_POWER_ACTION_SUSPEND;
+                 break;

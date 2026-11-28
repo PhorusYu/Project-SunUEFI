@@ -1,0 +1,354 @@
+From 49b300d8a9e87298f3bdaf7b7e5fb2e9fab964dc Mon Sep 17 00:00:00 2001
+From: Benjamin Otte <otte@redhat.com>
+Date: Thu, 26 Nov 2026 06:11:55 +0100
+Subject: [PATCH] gl: Keep different EGL configs for GL and GLES
+
+EGL has this fun idea that you don't just eglBindAPI() to select an API,
+you also have to use EGL_RENDERABLE_TYPE to select a compatible config.
+
+So we now do that.
+
+Fixes Mesa disabling the default setting for EGL_RENDERABLE_TYPE which
+is OpenGL ES 1.0 wen it's not compiled in, which apparently GTK
+(including GTK3) has been using everywhere (including Windows and
+Android) without problems for a few decades.
+
+Fixes: #8566
+Related: #8567
+Related: !10749
+Related: https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/46169
+Part-of: <https://gitlab.gnome.org/GNOME/gtk/-/merge_requests/10780>
+
+Backport: Adapt to GTK 4.24.1 context before native-fence detection and
+retain its comma-separated EGL display/config assignments.
+
+diff --git a/gdk/gdkdisplay.c b/gdk/gdkdisplay.c
+--- a/gdk/gdkdisplay.c
++++ b/gdk/gdkdisplay.c
+@@ -107,8 +107,10 @@
+ 
+ #ifdef HAVE_EGL
+   EGLDisplay egl_display;
+-  EGLConfig egl_config;
+-  EGLConfig egl_config_high_depth;
++  EGLConfig egl_gl_config;
++  EGLConfig egl_gl_config_high_depth;
++  EGLConfig egl_gles_config;
++  EGLConfig egl_gles_config_high_depth;
+ #endif
+ 
+   guint rgba : 1;
+@@ -181,6 +183,22 @@
+   return NULL;
+ }
+ 
++#ifdef HAVE_EGL
++/* Argument and return value are bitmasks! */
++static inline EGLint
++gdk_display_get_egl_mask_for_gl_api (GdkGLAPI api)
++{
++  int mask = 0;
++
++  if (api & GDK_GL_API_GL)
++    mask |= EGL_OPENGL_BIT;
++  if (api & GDK_GL_API_GLES)
++    mask |= EGL_OPENGL_ES3_BIT;
++
++  return mask;
++}
++#endif
++
+ static guint
+ gdk_display_default_rate_egl_config (GdkDisplay *display,
+                                      gpointer    egl_display,
+@@ -188,13 +206,17 @@
+ {
+   guint distance = 0;
+ #ifdef HAVE_EGL
++  EGLint api_type = gdk_display_get_egl_mask_for_gl_api (GDK_GL_API_GL | GDK_GL_API_GLES);
+   int tmp;
+ 
+   if (!eglGetConfigAttrib (egl_display, config, EGL_SAMPLE_BUFFERS, &tmp) || tmp != 0)
+-    distance += 0x20000;
++    distance += 0x40000;
+ 
+   if (!eglGetConfigAttrib (egl_display, config, EGL_DEPTH_SIZE, &tmp) || tmp != 0 ||
+       !eglGetConfigAttrib (egl_display, config, EGL_STENCIL_SIZE, &tmp) || tmp != 0)
++    distance += 0x20000;
++
++  if (!eglGetConfigAttrib (egl_display, config, EGL_RENDERABLE_TYPE, &tmp) || (tmp & api_type) != api_type)
+     distance += 0x10000;
+ #endif
+ 
+@@ -1276,6 +1298,7 @@
+ 
+ gpointer
+ gdk_display_get_egl_config (GdkDisplay     *self,
++                            GdkGLAPI        api,
+                             GdkMemoryDepth  depth)
+ {
+   GdkDisplayPrivate *priv = gdk_display_get_instance_private (self);
+@@ -1284,15 +1307,26 @@
+     {
+       case GDK_MEMORY_NONE:
+       case GDK_MEMORY_U8:
+-        return priv->egl_config;
++        if (api == GDK_GL_API_GL)
++          return priv->egl_gl_config;
++        else if (api == GDK_GL_API_GLES)
++          return priv->egl_gles_config;
++        else
++          return NULL;
+ 
+       case GDK_MEMORY_FLOAT16:
+       case GDK_MEMORY_FLOAT32:
+-        return priv->egl_config_high_depth;
++        if (api == GDK_GL_API_GL)
++          return priv->egl_gl_config_high_depth;
++        else if (api == GDK_GL_API_GLES)
++          return priv->egl_gles_config_high_depth;
++        else
++          return NULL;
++
+ 
+       case GDK_N_DEPTHS:
+       default:
+-        g_return_val_if_reached (priv->egl_config);
++        g_return_val_if_reached (NULL);
+     }
+ }
+ 
+@@ -1342,6 +1376,7 @@
+ 
+ static EGLConfig
+ gdk_display_create_egl_config (GdkDisplay               *self,
++                               GdkGLAPI                  api,
+                                GdkEGLConfigCreateFlags   flags,
+                                GError                  **error)
+ {
+@@ -1357,6 +1392,9 @@
+ 
+   attrs[i++] = EGL_SURFACE_TYPE;
+   attrs[i++] = EGL_WINDOW_BIT;
++
++  attrs[i++] = EGL_RENDERABLE_TYPE;
++  attrs[i++] = gdk_display_get_egl_mask_for_gl_api (api);
+ 
+   attrs[i++] = EGL_COLOR_BUFFER_TYPE;
+   attrs[i++] = EGL_RGB_BUFFER;
+@@ -1566,13 +1604,22 @@
+       return FALSE;
+     }
+ 
+-  priv->egl_config = gdk_display_create_egl_config (self,
+-                                                    allow_any ? 0 : GDK_EGL_CONFIG_PERFECT,
+-                                                    error);
+-  if (priv->egl_config == NULL)
++  priv->egl_gles_config = gdk_display_create_egl_config (self,
++                                                         GDK_GL_API_GLES,
++                                                         allow_any ? 0 : GDK_EGL_CONFIG_PERFECT,
++                                                         NULL);
++  priv->egl_gl_config = gdk_display_create_egl_config (self,
++                                                       GDK_GL_API_GL,
++                                                       allow_any ? 0 : GDK_EGL_CONFIG_PERFECT,
++                                                       error);
++  if (priv->egl_gl_config == NULL && priv->egl_gles_config == NULL)
+     {
+       g_clear_pointer (&priv->egl_display, eglTerminate);
+       return FALSE;
++    }
++  else if (priv->egl_gl_config == NULL)
++    {
++      g_clear_error (error);
+     }
+ 
+   self->have_egl_buffer_age =
+@@ -1589,17 +1636,28 @@
+     epoxy_has_egl_extension (priv->egl_display, "EGL_KHR_gl_colorspace");
+ 
+   if (self->have_egl_no_config_context)
+-    priv->egl_config_high_depth = gdk_display_create_egl_config (self,
+-                                                          GDK_EGL_CONFIG_HDR,
+-                                                          error);
+-  if (priv->egl_config_high_depth == NULL)
+-    priv->egl_config_high_depth = priv->egl_config;
++    {
++      priv->egl_gles_config_high_depth = gdk_display_create_egl_config (self,
++                                                                        GDK_GL_API_GLES,
++                                                                        GDK_EGL_CONFIG_HDR,
++                                                                        NULL);
++      priv->egl_gl_config_high_depth = gdk_display_create_egl_config (self,
++                                                                      GDK_GL_API_GL,
++                                                                      GDK_EGL_CONFIG_HDR,
++                                                                      NULL);
++    }
++  if (priv->egl_gles_config_high_depth == NULL)
++    priv->egl_gles_config_high_depth = priv->egl_gles_config;
++  if (priv->egl_gl_config_high_depth == NULL)
++    priv->egl_gl_config_high_depth = priv->egl_gl_config;
+ 
+   if (GDK_DISPLAY_DEBUG_CHECK (self, OPENGL))
+     {
+       char *ext = describe_extensions (priv->egl_display);
+-      char *std_cfg = describe_egl_config (priv->egl_display, priv->egl_config);
+-      char *hd_cfg = describe_egl_config (priv->egl_display, priv->egl_config_high_depth);
++      char *std_gl_cfg = describe_egl_config (priv->egl_display, priv->egl_gl_config);
++      char *hd_gl_cfg = describe_egl_config (priv->egl_display, priv->egl_gl_config_high_depth);
++      char *std_gles_cfg = describe_egl_config (priv->egl_display, priv->egl_gles_config);
++      char *hd_gles_cfg = describe_egl_config (priv->egl_display, priv->egl_gles_config_high_depth);
+       const char *path;
+       struct stat buf = { .st_rdev = 0, };
+ 
+@@ -1614,8 +1672,10 @@
+                          " - Client APIs: %s\n"
+                          " - Extensions:\n"
+                          "\t%s\n"
+-                         " - Selected fbconfig: %s\n"
+-                         "          high depth: %s",
++                         " - Selected GL fbconfig: %s\n"
++                         "          GL high depth: %s\n" 
++                         "          GLES fbconfig: %s\n"
++                         "        GLES high depth: %s\n",
+                          major, minor,
+                          eglQueryString (priv->egl_display, EGL_VENDOR),
+                          eglQueryString (priv->egl_display, EGL_VERSION),
+@@ -1626,10 +1686,16 @@
+                          0, 0,
+ #endif
+                          eglQueryString (priv->egl_display, EGL_CLIENT_APIS),
+-                         ext, std_cfg,
+-                         priv->egl_config_high_depth == priv->egl_config ? "none" : hd_cfg);
+-      g_free (hd_cfg);
+-      g_free (std_cfg);
++                         ext,
++                         std_gl_cfg,
++                         priv->egl_gl_config_high_depth == priv->egl_gl_config ? "none" : hd_gl_cfg,
++                         priv->egl_gles_config == priv->egl_gl_config ? "same as GL" : std_gles_cfg,
++                         priv->egl_gles_config_high_depth == priv->egl_gles_config ? "none" : 
++                         (priv->egl_gles_config_high_depth == priv->egl_gl_config_high_depth) ? "same as GL" : hd_gles_cfg);
++      g_free (hd_gles_cfg);
++      g_free (std_gles_cfg);
++      g_free (hd_gl_cfg);
++      g_free (std_gl_cfg);
+       g_free (ext);
+     }
+ 
+diff --git a/gdk/gdkdisplayprivate.h b/gdk/gdkdisplayprivate.h
+--- a/gdk/gdkdisplayprivate.h
++++ b/gdk/gdkdisplayprivate.h
+@@ -232,6 +232,7 @@
+                                                        GError          **error);
+ gpointer            gdk_display_get_egl_display       (GdkDisplay       *self);
+ gpointer            gdk_display_get_egl_config        (GdkDisplay       *self,
++                                                       GdkGLAPI          api,
+                                                        GdkMemoryDepth    depth);
+ 
+ void                gdk_display_set_rgba              (GdkDisplay       *display,
+diff --git a/gdk/gdkglcontext.c b/gdk/gdkglcontext.c
+--- a/gdk/gdkglcontext.c
++++ b/gdk/gdkglcontext.c
+@@ -332,9 +332,15 @@
+   forward_bit = gdk_gl_context_get_forward_compatible (context);
+ 
+   if (display->have_egl_no_config_context)
+-    egl_config = NULL;
++    {
++      egl_config = NULL;
++    }
+   else
+-    egl_config = gdk_display_get_egl_config (display, GDK_MEMORY_U8);
++    {
++      egl_config = gdk_display_get_egl_config (display, api, GDK_MEMORY_U8);
++      if (egl_config == NULL)
++        return 0;
++    }
+ 
+   if (debug_bit)
+     flags |= EGL_CONTEXT_OPENGL_DEBUG_BIT_KHR;
+@@ -649,7 +655,7 @@
+ 
+   if (priv->egl_surface == NULL ||
+       (priv->egl_surface != NULL &&
+-       gdk_display_get_egl_config (display, priv->egl_surface_depth) != gdk_display_get_egl_config (display, depth)))
++       gdk_display_get_egl_config (display, priv->api, priv->egl_surface_depth) != gdk_display_get_egl_config (display, priv->api, depth)))
+     {
+       GdkGLContext *cleared;
+       EGLint attribs[4];
+@@ -662,7 +668,7 @@
+         eglDestroySurface (gdk_display_get_egl_display (display), priv->egl_surface);
+ 
+       egl_display = gdk_display_get_egl_display (display),
+-      egl_config = gdk_display_get_egl_config (display, depth),
++      egl_config = gdk_display_get_egl_config (display, priv->api, depth),
+ 
+       i = 0;
+ /*
+diff --git a/gdk/x11/gdkdisplay-x11.c b/gdk/x11/gdkdisplay-x11.c
+--- a/gdk/x11/gdkdisplay-x11.c
++++ b/gdk/x11/gdkdisplay-x11.c
+@@ -52,6 +52,7 @@
+ #include "gdkprivate.h"
+ 
+ #include <glib.h>
++#include <glib/gi18n-lib.h>
+ #include <glib/gprintf.h>
+ #include <stdlib.h>
+ #include <string.h>
+@@ -2965,6 +2966,7 @@
+   GdkDisplay *display = GDK_DISPLAY (self);
+   Display *dpy = gdk_x11_display_get_xdisplay (GDK_DISPLAY (self));
+   EGLDisplay egl_display;
++  EGLConfig gl_config, gles_config;
+   XVisualInfo *visinfo;
+   int visualid;
+ 
+@@ -2991,16 +2993,48 @@
+         return FALSE;
+     }
+ 
++  gl_config = gdk_display_get_egl_config (display, GDK_GL_API_GL, GDK_MEMORY_U8);
++  gles_config = gdk_display_get_egl_config (display, GDK_GL_API_GLES, GDK_MEMORY_U8);
++
+   if (!eglGetConfigAttrib (gdk_display_get_egl_display (display),
+-                           gdk_display_get_egl_config (display, GDK_MEMORY_U8),
++                           gl_config ? gl_config : gles_config,
+                            EGL_NATIVE_VISUAL_ID,
+                            &visualid))
+     {
+       /* We guarantee this when rating configs */
+       g_assert_not_reached ();
+     }
++
+   visinfo = gdk_x11_display_get_visual_info_for_visual (self, visualid);
+   g_assert (visinfo);
++
++  if (gl_config && gles_config)
++    {
++      int gles_visualid;
++
++      if (!eglGetConfigAttrib (gdk_display_get_egl_display (display),
++                               gles_config,
++                               EGL_NATIVE_VISUAL_ID,
++                               &gles_visualid))
++        {
++          g_assert_not_reached ();
++        }
++      if (gles_visualid != visualid)
++        {
++          XVisualInfo *gles_visinfo = gdk_x11_display_get_visual_info_for_visual (self, visualid);
++          g_assert (gles_visinfo);
++
++          if (visinfo->visual != gles_visinfo->visual ||
++              visinfo->depth != gles_visinfo->depth)
++            {
++              g_set_error_literal (error, GDK_GL_ERROR,
++                                   GDK_GL_ERROR_UNSUPPORTED_FORMAT,
++                                   _("Incompatible visuals for GL and GLES"));
++              return FALSE;
++            }
++        }
++    }
++
+   *out_visual = visinfo->visual;
+   *out_depth = visinfo->depth;
+ 

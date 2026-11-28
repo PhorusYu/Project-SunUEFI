@@ -1,0 +1,20 @@
+{
+  "versions": [
+    "4.24.1+ds"
+  ],
+  "targets": [
+    "debian-gnome"
+  ],
+  "schema_version": 1,
+  "patches": [
+    {
+      "file": "0001-gl-keep-different-EGL-configs-for-GL-and-GLES.patch",
+      "sha256": "35f6d7a723bb1a47fd4eb47e674619e8604e36888ba87c3730edd92f2f6f2f2d",
+      "upstream": {
+        "status": "accepted",
+        "drop_when": "GTK includes API-specific EGL_RENDERABLE_TYPE selection for GL and GLES.",
+        "url": "https://gitlab.gnome.org/GNOME/gtk/-/commit/49b300d8a9e87298f3bdaf7b7e5fb2e9fab964dc"
+      }
+    }
+  ]
+}
